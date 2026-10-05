@@ -6058,17 +6058,25 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   function readStores(){
     const out=[];
     try{if(typeof window.notesLoad==='function')out.push(window.notesLoad())}catch(e){}
-    ['cgpsc_subject_html_notes_v2','cgpsc_subject_html_notes_v1'].forEach(k=>{
-      try{const o=JSON.parse(localStorage.getItem(k)||'{}');if(o&&typeof o==='object'&&!Array.isArray(o))out.push(o)}catch(e){}
+    const seen={};
+    ['cgpsc_subject_html_notes_v2','cgpsc_subject_html_notes_v1'].forEach(k=>{seen[k]=1;
+      try{const o=JSON.parse(localStorage.getItem(k)||'{}');if(o&&typeof o==='object')out.push(o)}catch(e){}
     });
+    /* last resort: any other localStorage entry that looks like a notes store */
+    try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);
+      if(!k||seen[k]||!/note/i.test(k)||/open_subjects|selected_topic|focus_timer/i.test(k))continue;
+      try{const o=JSON.parse(localStorage.getItem(k)||'null');if(o&&typeof o==='object')out.push(o)}catch(e){}
+    }}catch(e){}
     return out;
   }
   function findNoteById(id){
     const map=(typeof NOTES_LEGACY_MAP!=='undefined'&&NOTES_LEGACY_MAP)||{};
+    const isNote=x=>x&&typeof x==='object'&&String(x.id)===String(id)&&x.html!==undefined;
     for(const store of readStores()){
+      if(Array.isArray(store)){const n=store.find(isNote);if(n)return {...n,subject:n.subject||'Notes'};continue}
       for(const key of Object.keys(store||{})){
         const arr=store[key];if(!Array.isArray(arr))continue;
-        const n=arr.find(x=>x&&String(x.id)===String(id));
+        const n=arr.find(isNote);
         if(n)return {...n,subject:map[key]||key};
       }
     }
@@ -6076,20 +6084,35 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   window.notesFindById=findNoteById;
 
+  const BUILD='notes-reader-2026-10-05b';
+  window.KAUSHAL_NOTES_BUILD=BUILD;
+  function say(msg){try{if(typeof window.toast==='function')window.toast(msg);else console.warn(msg)}catch(e){console.warn(msg)}}
+
   window.notesOpenReader=function(id){
-    const found=findNoteById(id);
-    if(!found){console.warn('Note not found:',id);return}
+    let found=null;
+    try{found=findNoteById(id)}catch(e){console.error('[Kaushal] note lookup failed',e)}
+    if(!found){console.warn('[Kaushal] Note not found:',id,BUILD);say('Could not find that note on this device. Try reloading the page (Ctrl+Shift+R).');return}
     window._currentOpenNoteId=found.id;
     window._currentOpenNoteSubject=found.subject;
     window._editingNoteId='';
     ['start','progressScreen','revisionScreen','planScreen','studyHubScreen','quickQuizScreen','notesScreen','exam','confirm','result'].forEach(x=>$(x)?.classList.add('hidden'));
-    $('noteReaderTitle').textContent=found.title||'Untitled Note';
+    const t=$('noteReaderTitle'),sj=$('noteReaderSubject');
+    if(t)t.textContent=found.title||'Untitled Note';
     let topicLabel='';
-    if(found.topic){const t=String(found.topic).split('|').slice(1).join('|');topicLabel=t.replace(' › ',' › ')}
-    $('noteReaderSubject').textContent=found.subject+(topicLabel?' · '+topicLabel:'');
-    mount($('noteReaderContent'),found.html||'');
+    if(found.topic){topicLabel=String(found.topic).split('|').slice(1).join('|')}
+    if(sj)sj.textContent=found.subject+(topicLabel?' · '+topicLabel:'');
+    /* open the screen FIRST so a rendering problem can never leave the reader closed */
     $('noteReaderScreen')?.classList.remove('hidden');
     window.scrollTo(0,0);
+    const box=$('noteReaderContent');
+    try{mount(box,found.html||'')}
+    catch(err){
+      console.error('[Kaushal] note render failed',err);
+      if(box){box.innerHTML='';const pre=document.createElement('div');
+        pre.style.cssText='background:#fff;padding:24px;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere';
+        pre.textContent=String(found.html||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+        box.appendChild(pre)}
+    }
   };
 
   /* Edit loads the original source, not the rendered HTML. */
