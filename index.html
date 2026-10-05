@@ -5947,7 +5947,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     '*,*::before,*::after{box-sizing:border-box}'+
     'html{margin:0;padding:0;overflow-y:hidden;overflow-x:auto}'+
     'body{margin:0;padding:26px 28px 34px;background:#fff;color:#172A2D;font:16px/1.72 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere}'+
-    'img,video,svg{max-width:100%;height:auto}'+
+    'img,video{max-width:100%;height:auto}svg{max-width:100%}svg:not([height]){height:auto}'+
     'table{border-collapse:collapse;max-width:100%}'+
     'th,td{border:1px solid #D8E1DE;padding:9px 10px;vertical-align:top;text-align:left}'+
     'th{background:#EEF3F2;font-weight:800}'+
@@ -5957,13 +5957,14 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     '@media(max-width:700px){body{padding:18px 14px 28px;font-size:15px}}';
 
   /* Keeps the note's own <style>, classes, ids and inline styles. Only executable content is removed. */
-  function buildNoteDoc(raw){
+  function buildNoteDoc(raw,frameId){
     let source=String(raw||'');
     /* pasted JSON-escaped text (literal \n and no real line breaks) */
     if(!/[\r\n]/.test(source)&&/\\n/.test(source))source=source.replace(/\\r?\\n/g,'\n');
     const doc=new DOMParser().parseFromString(source,'text/html');
 
-    doc.querySelectorAll('script,iframe,frame,frameset,object,embed,applet,form,base,noscript,template,title,meta[http-equiv]').forEach(x=>x.remove());
+    doc.querySelectorAll('iframe,frame,frameset,object,embed,applet,form,base,noscript,template,meta[http-equiv]').forEach(x=>x.remove());
+    doc.querySelectorAll('script').forEach(sc=>{const src=(sc.getAttribute('src')||'').trim();if(src&&(urlBad(src)||!/^(https?:)?\/\//i.test(src)))sc.remove()});
     doc.querySelectorAll('link').forEach(l=>{
       const rel=String(l.getAttribute('rel')||'').toLowerCase().split(/\s+/);
       const href=l.getAttribute('href')||'';
@@ -5972,7 +5973,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     doc.querySelectorAll('*').forEach(el=>{
       [...el.attributes].forEach(a=>{
         const n=a.name.toLowerCase();
-        if(n.startsWith('on')||n==='srcdoc'||n==='formaction'){el.removeAttribute(a.name);return}
+        if(n==='srcdoc'||n==='formaction'){el.removeAttribute(a.name);return}
         if(['href','src','xlink:href','action','poster','background'].includes(n)&&urlBad(a.value)){el.removeAttribute(a.name);return}
         if(n==='style')el.setAttribute('style',fixCss(a.value));
       });
@@ -5983,9 +5984,14 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     if(doc.head)doc.head.querySelectorAll('style,link').forEach(x=>x.remove());
     const ha=attrString(doc.documentElement),ba=attrString(doc.body);
 
+    const bridge='<script>(function(){var id='+JSON.stringify(frameId)+';function h(){var d=document,b=d.body,r=d.documentElement;var v=Math.max(r.scrollHeight,b?b.scrollHeight:0);try{var bb=b.getBoundingClientRect();v=Math.max(v,Math.ceil(bb.bottom+(parseFloat(getComputedStyle(b).marginBottom)||0)))}catch(e){}if(r.scrollWidth>r.clientWidth+1)v+=16;parent.postMessage({kaushalNote:id,h:v},"*")}'+
+      'window.addEventListener("load",function(){h();[60,250,700,1500,3000].forEach(function(t){setTimeout(h,t)});try{new ResizeObserver(h).observe(document.documentElement);new ResizeObserver(h).observe(document.body)}catch(e){}});'+
+      'document.addEventListener("load",h,true);'+
+      'document.addEventListener("click",function(ev){var a=ev.target&&ev.target.closest?ev.target.closest("a[href]"):null;if(!a)return;var f=(a.getAttribute("href")||"").trim();ev.preventDefault();if(f.charAt(0)==="#"){var t=null;try{t=document.getElementById(decodeURIComponent(f.slice(1)))}catch(e){}if(t)t.scrollIntoView({behavior:"smooth"})}else if(/^https?:\\/\\//i.test(f)){parent.postMessage({kaushalNote:id,open:f},"*")}});'+
+      'h();})();<\/script>';
     return '<!doctype html><html'+(ha?' '+ha:'')+'><head><meta charset="UTF-8">'+
       '<style id="kaushal-note-base">'+BASE_CSS+'</style>'+headExtra+
-      '</head><body'+(ba?' '+ba:'')+'>'+doc.body.innerHTML+'</body></html>';
+      '</head><body'+(ba?' '+ba:'')+'>'+doc.body.innerHTML+bridge+'</body></html>';
   }
 
   function mount(container,raw){
@@ -5994,52 +6000,20 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     container.innerHTML='';
     const frame=document.createElement('iframe');
     frame.className='kaushal-note-html-frame';
-    frame.setAttribute('sandbox','allow-same-origin');   /* no scripts can run inside the note */
+    /* scripts run (so JS-drawn SVG diagrams work) but WITHOUT allow-same-origin: the note is isolated
+       from the app, its storage and cookies. */
+    frame.setAttribute('sandbox','allow-scripts');
+    const frameId='kn'+Math.random().toString(36).slice(2);
     frame.setAttribute('title','Saved note');
     frame.style.cssText='display:block;width:100%;height:240px;min-height:120px;border:0;background:#fff;border-radius:14px';
-
-    const measure=()=>{
-      const d=frame.contentDocument;if(!d||!d.documentElement||!d.body)return 0;
-      const root=d.documentElement,b=d.body,w=d.defaultView;
-      let h=Math.max(root.scrollHeight,b.scrollHeight);
-      if(h<=frame.clientHeight+1){          /* content may be SHORTER than the frame: measure the body box */
-        const r=b.getBoundingClientRect();
-        h=Math.ceil(r.bottom+(parseFloat(w.getComputedStyle(b).marginBottom)||0)+(w.scrollY||0));
-      }
-      if(root.scrollWidth>root.clientWidth+1)h+=16;   /* room for a horizontal scrollbar */
-      return h;
+    const onMsg=ev=>{
+      const m=ev.data;if(!m||m.kaushalNote!==frameId||ev.source!==frame.contentWindow)return;
+      if(typeof m.h==='number'&&m.h>0){const h=Math.max(120,Math.ceil(m.h));if(Math.abs(h-frame.clientHeight)>2)frame.style.height=h+'px'}
+      else if(typeof m.open==='string'&&/^https?:\/\//i.test(m.open))window.open(m.open,'_blank','noopener,noreferrer');
     };
-    let raf=0;
-    const resize=()=>{
-      if(raf)return;
-      raf=requestAnimationFrame(()=>{raf=0;try{
-        const h=measure();
-        if(h&&Math.abs(h-frame.clientHeight)>2)frame.style.height=Math.max(120,h)+'px';
-      }catch(e){}});
-    };
-    let ro=null;
-    const onWinResize=()=>resize();
-    window.addEventListener('resize',onWinResize,{passive:true});
-    container._notesCleanup=()=>{window.removeEventListener('resize',onWinResize);if(ro){try{ro.disconnect()}catch(e){}}};
-
-    frame.addEventListener('load',()=>{
-      const d=frame.contentDocument;if(!d)return;
-      resize();[60,250,700,1500].forEach(t=>setTimeout(resize,t));
-      try{if(d.fonts&&d.fonts.ready)d.fonts.ready.then(resize)}catch(e){}
-      d.addEventListener('load',resize,true);   /* images finishing later */
-      try{if(window.ResizeObserver){ro=new ResizeObserver(resize);ro.observe(d.documentElement);ro.observe(d.body)}}catch(e){}
-      /* links: #anchors scroll the page, web links open in a new tab, nothing navigates away from the note */
-      d.addEventListener('click',ev=>{
-        const a=ev.target&&ev.target.closest?ev.target.closest('a[href]'):null;if(!a)return;
-        const href=(a.getAttribute('href')||'').trim();
-        ev.preventDefault();
-        if(href.charAt(0)==='#'){
-          let t=null;try{t=d.getElementById(decodeURIComponent(href.slice(1)))}catch(e){}
-          if(t)window.scrollTo({top:t.getBoundingClientRect().top+frame.getBoundingClientRect().top+window.scrollY-70,behavior:'smooth'});
-        }else if(/^https?:\/\//i.test(href)){window.open(href,'_blank','noopener,noreferrer')}
-      });
-    });
-    frame.srcdoc=buildNoteDoc(raw);
+    window.addEventListener('message',onMsg);
+    container._notesCleanup=()=>window.removeEventListener('message',onMsg);
+    frame.srcdoc=buildNoteDoc(raw,frameId);
     container.appendChild(frame);
   }
 
