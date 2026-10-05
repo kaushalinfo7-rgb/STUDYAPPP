@@ -4277,7 +4277,9 @@ document.addEventListener('keydown',e=>{
 
 
 /* ---------- SUBJECT-WISE HTML NOTES ---------- */
-const NOTES_KEY='cgpsc_subject_html_notes_v1';
+const NOTES_KEY='cgpsc_subject_html_notes_v2'; /* FIX: notes UI saves to v2; sync used to read v1, so notes never reached the cloud */
+const NOTES_LEGACY_MAP={'Chhattisgarh General Studies':'General Studies','Hindi':'Language','English':'Language','Chhattisgarhi':'Language','Reasoning & Logical Ability':'Intelligence, Analytical & Logical Ability','Mental Ability':'Intelligence, Analytical & Logical Ability','Mathematics & Statistics':'Intelligence, Analytical & Logical Ability'};
+function notesNormalize(o){if(!o||typeof o!=='object'||Array.isArray(o))return {};const out={};Object.keys(o).forEach(k=>{if(!Array.isArray(o[k]))return;const nk=NOTES_LEGACY_MAP[k]||k,cur=out[nk]||[],seen=new Set(cur.map(n=>n&&n.id));out[nk]=[...cur,...o[k].filter(n=>n&&!seen.has(n.id))]});return out}
 const NOTES_SUBJECTS=['Chhattisgarh General Studies','Hindi','English','Chhattisgarhi','Reasoning & Logical Ability','Mental Ability','Mathematics & Statistics','Chemistry','Physics','Biology','Technology','Environment','Agriculture','Forestry','Current Affairs'];
 let notesSelectedSubject=NOTES_SUBJECTS[0];
 
@@ -4829,15 +4831,15 @@ cloudStatus=function(t){const e=$('cloudSyncText');if(e)e.textContent=t;document
 function mergeObj(l,r,key,pick){const m=new Map();(l||[]).forEach(x=>x&&m.set(x[key],x));(r||[]).forEach(x=>{if(!x)return;const o=m.get(x[key]);m.set(x[key],o?pick(o,x):x)});return[...m.values()]}
 function union(remote){
  const rb=migBank(remote.questionBanks||{}),lb=bankLoad(),b={};new Set([...Object.keys(lb),...Object.keys(rb)]).forEach(s=>b[s]=mergeObj(lb[s],rb[s],'id',o=>o));storageSet(QUESTION_BANKS_KEY,JSON.stringify(b));
- const ln=notesLoad(),rn=remote.notes||{},n={};new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(s=>n[s]=mergeObj(ln[s],rn[s],'id',(a,c)=>Date.parse(c.updatedAt||0)>Date.parse(a.updatedAt||0)?c:a));storageSet(NOTES_KEY,JSON.stringify(n));
+ const ln=notesLoad(),rn=notesNormalize(remote.notes),n={};new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(s=>n[s]=mergeObj(ln[s],rn[s],'id',(a,c)=>Date.parse(c.updatedAt||0)>Date.parse(a.updatedAt||0)?c:a));storageSet(NOTES_KEY,JSON.stringify(n));
  const t=getTrackerSnapshot(),rt=remote.tracker?.days||{};Object.entries(rt).forEach(([d,v])=>{if(!t.days[d]||Array.isArray(t.days[d]))t.days[d]=v;else if(v&&!Array.isArray(v))t.days[d]={...v,...t.days[d]}});storageSet(TRACKER_KEY,JSON.stringify(t));
  storageSet(REVISION_KEY,JSON.stringify(revisionMerge(revisionLoad(),remote.revision||[])));
  const lp=planLoad(),rp=remote.plan?.days||{};Object.entries(rp).forEach(([d,items])=>{lp.days[d]=mergeObj(lp.days[d],items,'id',(a,c)=>({...a,done:a.done||c.done}))});storageSet(PLAN_KEY,JSON.stringify(lp));
  storageSet(ATT,JSON.stringify(cleanAtt(mergeObj(J(ATT,[]),remote.attempts,'at',o=>o).sort((a,c)=>Date.parse(c.at)-Date.parse(a.at)))));
  if(remote.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),remote.studyTime)));
 }
-function takeRemote(r){if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes)storageSet(NOTES_KEY,JSON.stringify(r.notes));if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(r.tracker));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(r.plan));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)))}
-function refresh(){S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
+function takeRemote(r){if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes)storageSet(NOTES_KEY,JSON.stringify(notesNormalize(r.notes)));if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(r.tracker));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(r.plan));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)))}
+function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 applySnapshot=function(){return false};   /* never load another device's exam state */
 async function pull(full){
  if(!cloudEnabled()||pulling)return;pulling=true;
@@ -5461,6 +5463,122 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 })();
 </script>
 
+<!-- ============================================================
+     KAUSHAL NOTES TOPIC-FIRST REFORM
+     The landing page is now a topic library. The HTML editor is
+     available only after a specific syllabus topic is opened.
+     Existing V2 notes remain in the same localStorage store.
+     ============================================================ -->
+<style id="kaushal-notes-topic-first-css">
+  .notes-topic-first{width:min(1500px,calc(100% - 36px));margin:0 auto;padding:28px 0 60px}
+  .ntf-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:20px}
+  .ntf-kicker{font-size:11px;font-weight:900;letter-spacing:.15em;color:#0f766e}
+  .ntf-head h1{margin:5px 0 5px;font-size:clamp(28px,3vw,42px);letter-spacing:-.035em}
+  .ntf-head p{margin:0;color:var(--muted);max-width:820px;font-size:13px}
+  .ntf-head-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
+  .ntf-sync{padding:8px 12px;border-radius:999px;background:var(--soft);border:1px solid var(--border);font-size:11px;font-weight:800;color:var(--muted)}
+  .ntf-searchbar{display:flex;gap:10px;margin:0 0 18px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:15px;box-shadow:var(--shadow)}
+  .ntf-searchbar input{flex:1;min-width:0;height:44px;border:1px solid var(--border);border-radius:10px;background:var(--soft);color:var(--text);padding:0 13px;font:inherit;outline:none}
+  .ntf-searchbar input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(36,86,90,.08)}
+  .ntf-search-meta{display:flex;align-items:center;padding:0 8px;color:var(--muted);font-size:11px;font-weight:800;white-space:nowrap}
+  .ntf-subject-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .ntf-subject-card{background:var(--surface);border:1px solid var(--border);border-radius:17px;box-shadow:var(--shadow);overflow:hidden}
+  .ntf-subject-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 17px;border-bottom:1px solid var(--border)}
+  .ntf-subject-head h2{margin:0;font-size:17px;line-height:1.25}
+  .ntf-subject-head small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
+  .ntf-subject-count{flex:0 0 auto;min-width:34px;padding:6px 8px;border-radius:999px;background:var(--soft);color:var(--primary);font-size:10px;font-weight:900;text-align:center}
+  .ntf-groups{padding:10px 12px 13px;display:grid;gap:7px}
+  .ntf-group{border:1px solid var(--border);border-radius:11px;background:var(--soft);overflow:hidden}
+  .ntf-group-title{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 11px;font-size:11px;font-weight:900;color:var(--text);cursor:pointer;list-style:none}
+  .ntf-group-title::-webkit-details-marker{display:none}
+  .ntf-group-title:before{content:'›';font-size:17px;line-height:1;color:var(--primary);width:13px;transition:.15s}
+  .ntf-group[open] .ntf-group-title:before{content:'⌄'}
+  .ntf-group-title span:nth-child(2){flex:1}
+  .ntf-group-count{color:var(--muted);font-size:9px;font-weight:800}
+  .ntf-topic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 8px 9px}
+  .ntf-topic-btn{display:flex;align-items:center;justify-content:space-between;gap:7px;width:100%;min-height:39px;text-align:left;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);padding:7px 9px;font-size:10px;line-height:1.35;cursor:pointer;transition:.16s}
+  .ntf-topic-btn:hover{border-color:#789997;background:#eef5f3;transform:translateY(-1px)}
+  .ntf-topic-btn.is-selected{border-color:var(--primary);box-shadow:0 0 0 2px rgba(36,86,90,.08);background:#e8f2f0}
+  .ntf-topic-name{min-width:0}
+  .ntf-topic-count{flex:0 0 auto;min-width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--muted);font-size:9px;font-weight:900}
+  .ntf-topic-count.has-notes{background:var(--primary);color:#fff}
+  .ntf-empty-search{grid-column:1/-1;padding:30px;text-align:center;background:var(--surface);border:1px dashed var(--border);border-radius:14px;color:var(--muted)}
+  .ntf-workspace{display:none;background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
+  .ntf-workspace.is-open{display:block}
+  .ntf-workspace-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;padding:18px 20px;border-bottom:1px solid var(--border);background:var(--soft)}
+  .ntf-breadcrumb{font-size:10px;color:var(--muted);font-weight:800}
+  .ntf-workspace-head h2{margin:4px 0 3px;font-size:24px}
+  .ntf-workspace-head p{margin:0;color:var(--muted);font-size:11px}
+  .ntf-workspace-actions{display:flex;gap:7px;flex-shrink:0}
+  .ntf-editor-grid{display:grid;grid-template-columns:minmax(240px,330px) minmax(0,1fr);min-height:570px}
+  .ntf-topic-notes{border-right:1px solid var(--border);background:var(--soft);padding:15px}
+  .ntf-topic-notes-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+  .ntf-topic-notes-head strong{font-size:12px}
+  .ntf-topic-notes-head span{font-size:9px;color:var(--muted)}
+  .ntf-note-list{display:grid;gap:7px}
+  .ntf-note-card{display:flex;align-items:center;gap:7px;padding:9px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+  .ntf-note-open{min-width:0;flex:1;text-align:left;border:0;background:transparent;color:var(--text);cursor:pointer}
+  .ntf-note-open strong{display:block;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ntf-note-open small{display:block;color:var(--muted);font-size:9px;margin-top:2px}
+  .ntf-note-edit,.ntf-note-delete{width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:var(--soft);color:var(--text);cursor:pointer}
+  .ntf-note-empty{padding:18px 8px;text-align:center;color:var(--muted);font-size:10px;line-height:1.6}
+  .ntf-editor{padding:18px 20px;min-width:0}
+  .ntf-editor-state{padding:12px 13px;margin-bottom:12px;border:1px dashed var(--border);border-radius:11px;background:var(--soft);font-size:10px;color:var(--muted)}
+  .ntf-title-row{display:grid;gap:6px;margin-bottom:10px}
+  .ntf-title-row label{font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .ntf-title-row input{width:100%;height:43px;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit;outline:none}
+  .ntf-html-label{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:0 0 6px;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .ntf-html-hint{font-weight:600;text-transform:none;letter-spacing:0}
+  .ntf-html{display:block;width:100%;min-height:405px;resize:vertical;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:13px;background:#102225;color:#e8efed;font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;outline:none}
+  .ntf-html:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(36,86,90,.08)}
+  .ntf-editor-bottom{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px}
+  .ntf-status{font-size:10px;color:var(--muted);min-width:0}
+  .ntf-save-actions{display:flex;gap:7px;flex-shrink:0}
+  .ntf-preview{margin-top:12px;border:1px solid var(--border);border-radius:11px;overflow:hidden}
+  .ntf-preview-head{display:flex;justify-content:space-between;padding:8px 10px;background:var(--soft);font-size:10px;font-weight:900}
+  .ntf-preview-body{padding:0;background:var(--surface)}
+  @media(max-width:1050px){.ntf-subject-grid{grid-template-columns:1fr}.ntf-editor-grid{grid-template-columns:1fr}.ntf-topic-notes{border-right:0;border-bottom:1px solid var(--border)}}
+  @media(max-width:700px){
+    .notes-topic-first{width:min(100% - 18px,700px);padding:16px 0 42px}
+    .ntf-head{display:block}.ntf-head-actions{margin-top:12px}
+    .ntf-searchbar{display:block}.ntf-search-meta{padding:8px 3px 0}
+    .ntf-topic-grid{grid-template-columns:1fr}
+    .ntf-workspace-head{display:block}.ntf-workspace-actions{margin-top:11px}
+    .ntf-editor{padding:15px}.ntf-html{min-height:350px}
+    .ntf-editor-bottom{display:block}.ntf-save-actions{margin-top:9px}.ntf-save-actions .btn{flex:1}
+  }
+
+  .ntf-lottery{margin:0 0 16px;padding:16px 18px;background:linear-gradient(135deg,var(--surface),rgba(217,201,139,.10));border:1px solid var(--border);border-radius:17px;box-shadow:var(--shadow)}
+  .ntf-lottery.is-running{border-color:var(--primary)}
+  .ntf-lot-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .ntf-lot-badge{padding:5px 9px;border-radius:999px;background:var(--gold);color:var(--primary-dark);font-size:10px;font-weight:900;letter-spacing:.12em}
+  .ntf-lot-pool{flex:1;min-width:140px;color:var(--muted);font-size:11px;font-weight:700}
+  .ntf-lot-top select{min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);padding:0 10px;font:inherit;font-size:12px;max-width:100%}
+  .ntf-lot-main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;margin-top:12px;align-items:stretch}
+  .ntf-lot-sel{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+  .ntf-lot-label,.ntf-lot-timer>span{font-size:9px;font-weight:900;letter-spacing:.14em;color:var(--muted)}
+  .ntf-lot-sel h3{margin:2px 0 0;font-size:20px;line-height:1.3;overflow-wrap:anywhere}
+  .ntf-lot-sel p{margin:0 0 8px;color:var(--muted);font-size:12px;line-height:1.5}
+  .ntf-lot-timer{padding:13px;border:1px solid var(--border);border-radius:14px;background:var(--soft);text-align:center}
+  .ntf-lot-timer strong{display:block;font-size:38px;line-height:1.15;margin:3px 0 8px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .ntf-lot-track{height:7px;background:var(--track,#dfe6e4);border-radius:99px;overflow:hidden}
+  .ntf-lot-track i{display:block;height:100%;width:0;background:var(--progress,var(--primary));transition:width .4s linear}
+  .ntf-lot-actions{display:flex;gap:6px;justify-content:center;margin-top:11px}.ntf-lot-actions .btn{flex:1;padding-left:8px;padding-right:8px}
+  .ntf-lottery .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .ntf-congrats{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:20px;background:rgba(10,25,27,.55);backdrop-filter:blur(3px)}
+  .ntf-congrats-card{max-width:420px;width:100%;padding:28px 24px;border-radius:20px;background:var(--surface,#fff);color:var(--text,#172A2D);text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.35);animation:ntfPop .35s ease}
+  .ntf-congrats-emoji{font-size:54px;line-height:1}.ntf-congrats-card h3{margin:10px 0 6px;font-size:26px}
+  .ntf-congrats-card p{margin:0 0 8px;font-size:14px;line-height:1.55}.ntf-congrats-sub{color:var(--muted);font-size:12px!important}
+  .ntf-congrats-card .btn{margin-top:8px;min-width:170px}
+  @keyframes ntfPop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+  @media(max-width:700px){.ntf-lot-main{grid-template-columns:1fr}.ntf-lot-top select,.ntf-lot-top .btn{flex:1}}
+  body.theme-dark .ntf-subject-card,body.theme-dark .ntf-searchbar,body.theme-dark .ntf-workspace,
+  body.theme-dark .ntf-topic-btn,body.theme-dark .ntf-note-card{background:var(--surface)}
+  body.theme-dark .ntf-group,body.theme-dark .ntf-searchbar input,body.theme-dark .ntf-workspace-head,
+  body.theme-dark .ntf-topic-notes,body.theme-dark .ntf-editor-state,body.theme-dark .ntf-topic-count{background:var(--soft)}
+  body.theme-dark .ntf-topic-btn:hover,body.theme-dark .ntf-topic-btn.is-selected{background:#294547}
+</style>
+
 
 <style id="notes-v2-css">
 /* ============================================================
@@ -5965,6 +6083,508 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   if(typeof window.notesV2EditNote!=='function' && typeof window.notesEditOpenNote==='function'){
     /* no-op: V2 implementation will publish the helper below when available */
   }
+})();
+</script>
+
+<script id="kaushal-notes-topic-first-js">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const KEY='cgpsc_subject_html_notes_v2';
+  const CATALOG=[{"name":"General Studies","groups":[["History & Independence Movement",["History of Chhattisgarh","Role of Chhattisgarh in the Independence Movement"]],["Geography, Environment & Heritage",["Geography","Physical Directions","Census","Archaeology","Places of Tourist Interest in Chhattisgarh"]],["Art, Music, Dance & Culture",["History, Music, Dance, Art and Culture","Riddles and Proverbs","Local Proverbs of Chhattisgarh"]],["Tribal Culture & Traditions",["Tribal and Special Traditions","Festivals of Chhattisgarh"]],["Economy, Forest & Agriculture",["Economy of Chhattisgarh","Forest of Chhattisgarh","Agriculture of Chhattisgarh"]],["Administration & Panchayati Raj",["Administrative Setup","Local Administration","Panchayati Raj in Chhattisgarh"]],["Industries, Energy, Water & Minerals",["Industries","Energy","Water Resources","Mineral Resources"]],["Current Affairs",["Current Affairs of Chhattisgarh"]]]},{"name":"Language","groups":[["General Hindi",["Comprehension and Understanding","Précis Writing","Synonyms and Antonyms","Homonyms and their Meaning","Meaningful Words for a Phrase","Vocabulary and Usage","Compound Words and their Separation","Words Taken from Sanskrit","Word and Sentence Correction","Prefix and Suffixes","Proverbs: Meaning and Use","Letter Writing","History of Hindi Literature","Writers of Chhattisgarh and their Works"]],["General English",["Comprehension","Précis Writing","Re-arrangement and Correction of Sentences","Synonyms and Antonyms","Filling the Blanks","Correction of Spellings","Vocabulary and Usage","Idioms and Phrases","Tenses","Prepositions","Active and Passive Voice","Parts of Speech","English to Hindi Translation","Letter Writing"]],["Chhattisgarhi Language",["Knowledge of Chhattisgarhi Language","History and Development of Chhattisgarhi Language","Chhattisgarhi Literature and Laureates","Chhattisgarhi Grammar","Hindi to Chhattisgarhi Translation","Chhattisgarhi to Hindi Administrative Dictionary"]]]},{"name":"Intelligence, Analytical & Logical Ability","groups":[["Core Areas",["Communication Skills and Mutual Skills","Logical Reasoning and Ability to Analyze","Decision Making","Development and Problem Solving","General Mental Ability"]],["Basic Statistical Works",["General Mathematics Ability: Class X Level","Analysis of Numbers","Charts","Underlines","Tables"]]]},{"name":"Chemistry","groups":[["Chemical Reactions & Equilibrium",["Rate of Chemical Reaction","Fast and Slow Chemical Reactions","Reversible and Irreversible Chemical Reactions","Dynamic Nature of Equilibrium","Acids and Bases","pH Scale and Simple Numericals","Exothermic and Endothermic Reactions"]],["Important Compounds & Materials",["Water","Washing Soda","Baking Soda","Bleaching Powder","Plaster of Paris","Lime","Cement","Glass","Steel"]],["Metals & Metallurgy",["Position of Metals in Periodic Table","General Properties of Metals","Metal, Mineral and Ore","Difference Between Mineral and Ore","Concentration of Ores","Roasting","Smelting","Refining","Metallurgy of Copper and Iron","Corrosion of Metals","Alloys"]],["Nonmetals",["Position of Nonmetals in Periodic Table","Hydrogen: Preparation, Properties and Uses","Oxygen: Preparation, Properties and Uses","Nitrogen: Preparation, Properties and Uses"]],["Organic Compounds & Polymers",["Alcohol","Acetic Acid","Artificial Polymers","Polythene","Polyvinyl Chloride","Teflon","Soap and Detergents"]]]},{"name":"Physics","groups":[["Sources of Energy",["Conventional and New Sources of Energy","Solar Energy","Origin of Energy in the Sun","Solar Heating Devices","Solar Cooker","Solar Cell","Wind Energy","Biogas","Fossil Fuels","Ideal Fuel and Its Properties","Nuclear Energy","Nuclear Fission and Fusion","Chain Reaction","Nuclear Reactor","Uses and Harms of Nuclear Energy","CREDA"]],["Light",["Nature of Light","Laws of Reflection","Plane and Curved Surfaces","Plane, Convex and Concave Mirrors","Image Formation","Focal Length and Radius of Curvature","Single Pin Method for Concave Mirror","u-v-f Relation and Numericals","Refraction and Laws of Refraction","Glass Slab","Critical Angle","Total Internal Reflection","Lenses","Human Eye and Defects","Camera and Human Eye","Simple and Astronomical Telescope"]],["Electricity & Effects",["Electric Intensity","Potential and Potential Difference","Electric Current","Ohm’s Law","Resistance and Specific Resistance","Combination of Resistance","Thermal Effect of Current","Power and Electrical Energy","Chemical Effects of Electric Current","Primary and Secondary Cells","Leclanche Cell","Dry Cell","Lead Accumulator Cell"]],["Magnetic Effects & Magnetism",["Oersted Experiment","Electromagnetic Induction","Electric Motor","Generator","Alternating and Direct Current","Electric Discharge in Gases","Discharge Tube","Cathode Rays","X-rays","Magnets and Types","Preparation of Artificial Magnets","Molecular Theory of Magnetism","Demagnetization","Magnetic Keepers","Magnetic Lines of Force","Terrestrial Magnetism","Magnetic Storm","Magnetic and Geographical Meridian","Relation between VHI and Ø"]]]},{"name":"Biology","groups":[["Animal Nutrition & Digestion",["Types of Nutrition","Autotrophic and Heterotrophic Nutrition","Holozoic, Parasitic, Saprophytic and Symbiotic Nutrition","Insectivorous Nutrition","Terms of Nutrition Process","Digestion in Amoeba","Digestion in Grasshopper","Human Digestive System and Process"]],["Photosynthesis",["Light Reaction","Dark Reaction","Factors Influencing Photosynthesis","Experiments Related to Photosynthesis"]],["Respiration",["Respiratory Organs of Animals","Breathing and Respiration","Aerobic and Anaerobic Respiration","Human Respiratory System","Mechanism of Respiration","Respiratory Quotient of Carbohydrate, Fat and Protein"]],["Transport & Circulation",["Transport of Mineral and Water in Plants","Human Blood: Composition and Function","Heart Structure and Working","Blood Vessels","Blood Coagulation","Blood Groups","Blood Transfusion","Blood Bank","Lymph System","Heart-related Diseases"]],["Excretion & Osmoregulation",["Excretion in Plants","Excretory Products","Excretion in Animals and Excretory Organs","Human Excretory System","Dialysis and Artificial Kidney","Osmoregulation","Kidney-related Diseases"]],["Control & Coordination",["Plant Phytohormones","Human Nervous System","Brain Structure and Function","Spinal Cord","Reflex Action","Endocrine Glands","Hormones and Their Functions"]],["Reproduction & Growth",["Asexual Reproduction","Fission and Budding","Regeneration","Vegetative Reproduction","Layering, Cutting and Grafting","Parthenogenesis","Sexual Reproduction in Plants","Flower Structure","Pollination and Fertilization","Human Reproductive System and Reproduction Process"]],["Heredity & Evolution",["Heredity and Variation","Chromosomes","DNA","Genes","Sex Determination","Organic Evolution","Oparin’s Theory"]]]},{"name":"Technology","groups":[["Science & Technology Policy",["National Policy of Science and Technology","Changes in Science and Technology Policy","Purpose of Technology"]],["Space Programme",["Space Programme in India","Industrial Applications","Agricultural Applications","Rural Development Applications","INSAT","IRS Systems"]],["Information Technology",["Role of IT in Rural India","Basics of Computers","Computers in Communication and Broadcasting","Software Development for Economic Growth","Broad Applications of IT"]],["Energy Resources",["Energy Demands","Renewable and Non-renewable Energy Resources","Nuclear Energy and Its Development and Utilization"]],["Agricultural Science & Current Developments",["Current Science and Technology Developments in India","Origin of Agriculture","Progress of Agricultural Science","Impact of Agricultural Science","Crop Science in India","Fertilizers","Pest and Disease Control Scenario in India"]]]},{"name":"Environment","groups":[["Biodiversity & Conservation",["Definition and Introduction","Species Diversity","Genetic Diversity","Biogeographic Classification of India","Importance of Biodiversity","Constructive and Destructive Applications","Social, Moral and Alternative Vision","Global, National and Local Biodiversity","India as a Wide Diversity Nation","Biodiversity Hotspots","Threats to Biodiversity","Habitat Damage","Wildlife Damage","Human-wildlife Conflict","Threatened and Endangered Species of India","Local Species","In-situ and Ex-situ Conservation"]],["Environmental Pollution",["Air Pollution","Water Pollution","Soil Pollution","Sound/Noise Pollution","Thermal Pollution","Nuclear Pollution","Causes, Effects and Control"]],["Solid Waste Management",["Urban Solid Waste","Industrial Solid Waste","Causes, Effects and Control","Human Role in Pollution Control"]],["Disaster Management",["Floods","Earthquakes","Cyclones","Landslides"]],["Human Population & Environment",["Population Growth","Population Variation Among Countries","Population Explosion","Family Welfare Programme","Environment and Human Health"]]]},{"name":"Agriculture","groups":[["Ecology, Resources & Crop Production",["Ecology and Its Relevance to Man","Natural Resources and Sustainable Management","Physical and Social Environment","Climatic Elements and Crop Growth","Changing Environment and Cropping Pattern","Environmental Pollution and Hazards to Crops, Animals and Humans"]],["Cropping Systems & Agro-climatic Zones",["Cropping Pattern in Agro-climatic Zones","High-yielding and Short-duration Varieties","Multiple Cropping","Multistorey Cropping","Relay Cropping","Intercropping"]],["Crop Production Practices",["Cereals","Pulses","Oilseeds","Fibres","Sugar Crops","Commercial Crops","Fodder Crops","Kharif Crops","Rabi Crops"]],["Forestry Plantations",["Extension Forestry","Social Forestry","Agroforestry","Natural Forests"]],["Weed Management",["Weed Characteristics","Dissemination and Crop Association","Multiplication of Weeds","Cultural Control","Biological Control","Chemical Control"]],["Soil Science & Fertility",["Physical, Chemical and Biological Properties of Soil","Soil Formation","Indian Soil Classification","Mineral and Organic Constituents","Essential Plant Nutrients","Beneficial Elements","Soil Fertility and Its Evaluation","Judicious Fertilizer Use","Integrated Nutrient Management","Nitrogen Losses","Nitrogen-use Efficiency in Submerged Rice","Nitrogen Fixation","Phosphorus and Potassium Fixation","Efficient Nutrient Use"]],["Problem Soils & Conservation",["Problem Soils and Reclamation","Watershed-based Soil Conservation","Erosion and Run-off in Hilly, Foothill and Valley Lands","Dryland Agriculture","Stabilising Rain-fed Agriculture"]],["Irrigation & Drainage",["Water-use Efficiency","Irrigation Scheduling","Reducing Run-off Losses","Drip Irrigation","Sprinkler Irrigation","Drainage of Waterlogged Soils","Quality of Irrigation Water","Industrial Effluents and Soil/Water Pollution"]],["Farm Management & Economics",["Scope and Characteristics of Farm Management","Farm Planning","Optimum Resource Use","Budgeting","Economics of Farming Systems","Marketing and Pricing","Price Fluctuations and Cost","Cooperatives","Types and Systems of Farming","Factors Affecting Farming Systems"]],["Agricultural Extension & Mechanization",["Importance and Role of Extension","Evaluation of Extension Programmes","Socioeconomic Survey","Big, Small and Marginal Farmers","Landless Agricultural Labourers","Farm Mechanization","Rural Employment","Training Programmes","Lab-to-Land Programmes"]],["Genetics, Cell Biology & Plant Breeding",["Cell Theory and Cell Structure","Cell Organelles","Cell Division","Nucleic Acids","Gene Structure and Function","Laws of Heredity","Chromosome Structure","Chromosomal Aberrations","Linkage and Crossing-over","Polyploidy, Euploidy and Aneuploidy","Mutation","Variation and Components of Variation","Heritability","Sterility and Incompatibility","Cytoplasmic Inheritance","Sex-linked, Sex-influenced and Sex-limited Characters","History of Plant Breeding","Selfing and Crossing","Origin and Evolution of Crop Plants","Centres of Origin","Law of Homologous Series","Genetic Resources","Pure-line, Pedigree, Mass and Recurrent Selection","Combining Ability","Hybrid Vigour","Backcross Breeding","Disease and Pest Resistance","Interspecific and Intergeneric Hybridization","Biotechnology in Plant Breeding","Improved Varieties, Hybrids and Composites"]],["Seed Technology",["Importance of Seed Technology","Kinds of Seeds","Seed Production","Seed Processing","Public and Private Sector Role in Seed Production, Processing and Marketing"]],["Plant Physiology",["Imbibition","Surface Tension","Diffusion and Osmosis","Water Absorption and Translocation","Transpiration and Water Economy","Enzymes and Plant Pigments","Photosynthesis and Factors Affecting It","Aerobic and Non-aerobic Respiration","C, C and CAM Mechanisms","Carbohydrate Metabolism","Protein Metabolism","Fat Metabolism","Growth and Development","Photoperiodism","Vernalization","Auxins and Other Plant Regulators","Seed Development and Germination","Dormancy"]],["Horticulture",["Climatic Requirements and Cultivation of Major Fruits","Vegetable Crops","Flower Plants","Package of Practices","Handling and Marketing of Fruits and Vegetables","Preservation Methods","Processing Techniques and Equipment","Role in Human Nutrition","Ornamental Plants","Lawns and Gardens"]],["Plant Pests & Diseases",["Diseases and Pests of Field Crops","Vegetable, Orchard and Plantation Crops","Causes and Classification","Principles of Control","Biological Control","Integrated Pest and Disease Management","Epidemiology and Forecasting","Pesticides and Formulations","Modes of Action","Compatibility with Rhizobial Inoculants","Microbial Toxins","Storage Pests and Diseases of Cereals and Pulses"]],["Food Production & Policy",["Food Production and Consumption Trends","National and International Food Policies","Production, Procurement, Distribution and Processing Constraints","National Dietary Pattern","Calorie Deficiency","Protein Deficiency"]]]},{"name":"Forestry","groups":[["Silviculture",["Silviculture — General","Silviculture Systems","Silviculture of Mangrove and Cold Desert","Silviculture of Trees"]],["Agroforestry, Social Forestry & JFM",["Agroforestry","Social Forestry","Joint Forest Management","Tribology"]],["Forest Soil & Watershed",["Forest Soil","Soil Conservation","Watershed Management"]],["Environment & Biodiversity",["Environment Conservation","Biodiversity","Pollution"]],["Tree Improvement & Technology",["Tree Improvement","Forestry Technology"]],["Forest Management & Working Plan",["Forest Management","Management Systems","Forest Working Plan"]],["Mensuration, Remote Sensing & Survey",["Forest Mensuration","Remote Sensing","Survey","Forest Engineering"]],["Ecology & Ethnobotany",["Forest Ecology","Ethno Botany"]],["Utilisation, Protection & Wildlife",["Forest Resources Utilisation","Forest Protection","Wildlife Biology"]],["Economics & Legislation",["Forest Economics","Forest Legislation"]]]}];
+  let selected={subject:'',group:'',topic:''};
+  let editingId='';
+  let search='';
+  let originalNotesScreenHTML='';
+
+  /* ---------- Focus Lottery (15-minute session, 10-day cooldown) ---------- */
+  const FOCUS_SECS=900, COOLDOWN_DAYS=10, COOLDOWN_MS=COOLDOWN_DAYS*86400000;
+  const TIMER_KEY='cgpsc_notes_focus_timer_v1';
+  let lot={id:'',subject:'',seconds:FOCUS_SECS,running:false,handle:null,segStart:0,endAt:0,logged:0,filter:'__all__'};
+  function parseTopic(t){
+    const parts=String(t||'').split('|'),rest=parts.slice(1).join('|'),sep=rest.indexOf(' › ');
+    return sep>=0?{group:rest.slice(0,sep),topic:rest.slice(sep+3)}:{group:'',topic:rest||String(t||'')};
+  }
+  function isCoolingDown(n){
+    const t=Date.parse(n&&n.lotteryDoneAt||'');
+    return !isNaN(t)&&(Date.now()-t)<COOLDOWN_MS;
+  }
+  function daysLeft(n){
+    const t=Date.parse(n&&n.lotteryDoneAt||'');
+    return Math.max(0,Math.ceil((COOLDOWN_MS-(Date.now()-t))/86400000));
+  }
+  /* pool = every saved note that belongs to a syllabus topic and is not in its 10-day rest */
+  function lotteryPool(filter){
+    const d=load(),pool=[];let resting=0;
+    CATALOG.forEach(sub=>{
+      if(filter&&filter!=='__all__'&&sub.name!==filter)return;
+      (Array.isArray(d[sub.name])?d[sub.name]:[]).forEach(n=>{
+        if(!n||!String(n.html||'').trim()||!String(n.topic||'').includes(' › '))return;
+        if(isCoolingDown(n)){resting++;return}
+        pool.push({...n,subject:sub.name});
+      });
+    });
+    return {pool,resting};
+  }
+  function findNote(id){
+    const d=load();
+    for(const sub of CATALOG){const n=(Array.isArray(d[sub.name])?d[sub.name]:[]).find(x=>x&&x.id===id);if(n)return {...n,subject:sub.name}}
+    return null;
+  }
+  function fmt(sec){return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0')}
+  function persistTimer(){
+    try{localStorage.setItem(TIMER_KEY,JSON.stringify({id:lot.id,subject:lot.subject,seconds:lot.seconds,running:lot.running,endAt:lot.running?lot.endAt:0,filter:lot.filter}))}catch(e){}
+  }
+  function refreshStudyViews(){
+    try{if(typeof window.trackerRender==='function')window.trackerRender()}catch(e){}
+    try{const p=$('progressScreen');if(p&&!p.classList.contains('hidden')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}
+    try{const p=$('planScreen');if(p&&!p.classList.contains('hidden')&&typeof window.planRender==='function')window.planRender()}catch(e){}
+  }
+  /* adds the time studied to the app-wide study-time log (feeds Progress / Plan / Study-time report) */
+  function logFocusSegment(){
+    if(!lot.segStart)return;
+    const secs=Math.floor((Date.now()-lot.segStart)/1000);lot.segStart=0;
+    if(secs<1||typeof window.kaushalLogStudyTime!=='function')return;
+    const n=findNote(lot.id),p=n?parseTopic(n.topic):{group:'',topic:''};
+    window.kaushalLogStudyTime(secs,{cat:lot.subject||'Notes',topic:p.topic||(n&&n.title)||'Focus study',src:'notes-focus'});
+    lot.logged+=secs;
+    refreshStudyViews();
+  }
+  function stopLot(log){
+    if(log!==false)logFocusSegment();
+    if(lot.handle){clearInterval(lot.handle);lot.handle=null}
+    lot.running=false;lot.segStart=0;persistTimer();paintLottery();
+  }
+  function tick(){
+    lot.seconds=Math.max(0,Math.round((lot.endAt-Date.now())/1000));
+    if(lot.seconds<=0){completeFocus();return}
+    paintTimer();
+  }
+  function startLot(){
+    if(!lot.id)return;
+    if(lot.running)return;
+    if(lot.seconds<=0)lot.seconds=FOCUS_SECS;
+    lot.running=true;lot.segStart=Date.now();lot.endAt=Date.now()+lot.seconds*1000;
+    clearInterval(lot.handle);lot.handle=setInterval(tick,500);
+    persistTimer();paintLottery();
+  }
+  function resetLot(){
+    stopLot(true);lot.seconds=FOCUS_SECS;lot.logged=0;persistTimer();paintLottery();
+  }
+  function completeFocus(){
+    logFocusSegment();
+    if(lot.handle){clearInterval(lot.handle);lot.handle=null}
+    lot.running=false;lot.seconds=0;
+    const id=lot.id,n=findNote(id);
+    /* mark the note completed -> it is hidden from the lottery for the next 10 days */
+    if(n){
+      const d=load(),arr=Array.isArray(d[n.subject])?d[n.subject]:[];
+      const i=arr.findIndex(x=>x&&x.id===id);
+      if(i>=0){arr[i]={...arr[i],lotteryDoneAt:new Date().toISOString()};d[n.subject]=arr;save(d)}
+    }
+    const title=n?(n.title||'this note'):'this note';
+    lot.id='';lot.subject='';lot.seconds=FOCUS_SECS;lot.logged=0;persistTimer();
+    paintLottery();renderLibrary();
+    congrats(title);
+  }
+  function congrats(title){
+    const old=$('ntfCongrats');if(old)old.remove();
+    const el=document.createElement('div');el.id='ntfCongrats';el.className='ntf-congrats';
+    el.innerHTML=`<div class="ntf-congrats-card" role="dialog" aria-live="assertive">
+      <div class="ntf-congrats-emoji">🎉</div>
+      <h3>Congratulations!</h3>
+      <p>You completed a full 15-minute focus session on <b>${esc(title)}</b>.</p>
+      <p class="ntf-congrats-sub">15 minutes were added to your total study time. This note will rest for ${COOLDOWN_DAYS} days before it can be drawn again.</p>
+      <button type="button" class="btn primary" id="ntfCongratsOk">Great, continue</button></div>`;
+    document.body.appendChild(el);
+    $('ntfCongratsOk').onclick=()=>el.remove();
+    try{if(navigator.vibrate)navigator.vibrate([120,60,120])}catch(e){}
+  }
+  function drawLot(){
+    if(lot.running)stopLot(true);else logFocusSegment();
+    const {pool}=lotteryPool(lot.filter);
+    if(!pool.length){paintLottery();return}
+    let cand=pool.length>1?pool.filter(n=>n.id!==lot.id):pool;
+    const pick=cand[Math.floor(Math.random()*cand.length)];
+    lot.id=pick.id;lot.subject=pick.subject;lot.seconds=FOCUS_SECS;lot.logged=0;
+    persistTimer();paintLottery();startLot();
+  }
+  function openLotNote(){
+    if(lot.id&&typeof window.notesOpenReader==='function')window.notesOpenReader(lot.id);
+  }
+  function paintTimer(){
+    const t=$('ntfLotTimer'),p=$('ntfLotProgress');
+    if(t)t.textContent=fmt(lot.seconds);
+    if(p)p.style.width=((FOCUS_SECS-lot.seconds)/FOCUS_SECS*100)+'%';
+  }
+  function paintLottery(){
+    const host=$('ntfLottery');if(!host)return;
+    const sel=$('ntfLotFilter');
+    if(sel&&sel.dataset.built!=='1'){
+      sel.innerHTML='<option value="__all__">All subjects</option>'+CATALOG.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+      sel.dataset.built='1';
+    }
+    if(sel)sel.value=lot.filter;
+    const {pool,resting}=lotteryPool(lot.filter);
+    const n=lot.id?findNote(lot.id):null;
+    $('ntfLotPool').textContent=`${pool.length} note${pool.length===1?'':'s'} available`+(resting?` · ${resting} resting for ${COOLDOWN_DAYS} days`:'');
+    if(n){
+      const p=parseTopic(n.topic);
+      $('ntfLotTitle').textContent=n.title||'Untitled Note';
+      $('ntfLotMeta').textContent=n.subject+(p.group?' · '+p.group:'')+(p.topic?' › '+p.topic:'');
+    }else if(!pool.length){
+      $('ntfLotTitle').textContent=resting?'All saved notes are resting':'Save a note under a topic to start';
+      $('ntfLotMeta').textContent=resting?'Notes you completed return to the draw after '+COOLDOWN_DAYS+' days.':'The draw picks from the notes you have saved under syllabus topics.';
+    }else{
+      $('ntfLotTitle').textContent='What should I study now?';
+      $('ntfLotMeta').textContent='Draw a note — a 15:00 focus timer starts automatically.';
+    }
+    $('ntfLotOpen').disabled=!n;
+    $('ntfLotStart').disabled=!n||lot.running;
+    $('ntfLotPause').disabled=!lot.running;
+    $('ntfLotReset').disabled=!n;
+    $('ntfLotDraw').disabled=!pool.length;
+    host.classList.toggle('is-running',lot.running);
+    paintTimer();
+  }
+  function lotteryHTML(){
+    return `<section class="ntf-lottery" id="ntfLottery">
+      <div class="ntf-lot-top"><span class="ntf-lot-badge">FOCUS LOTTERY</span><span class="ntf-lot-pool" id="ntfLotPool"></span>
+        <select id="ntfLotFilter" aria-label="Lottery subject filter"></select>
+        <button class="btn primary" id="ntfLotDraw" type="button">Draw Focus Note</button></div>
+      <div class="ntf-lot-main">
+        <div class="ntf-lot-sel"><span class="ntf-lot-label">SELECTED NOTE</span><h3 id="ntfLotTitle"></h3><p id="ntfLotMeta"></p>
+          <button class="btn outline" id="ntfLotOpen" type="button" disabled>Open Selected Note</button></div>
+        <div class="ntf-lot-timer"><span>15-MINUTE FOCUS</span><strong id="ntfLotTimer">15:00</strong>
+          <div class="ntf-lot-track"><i id="ntfLotProgress"></i></div>
+          <div class="ntf-lot-actions"><button class="btn primary" id="ntfLotStart" type="button">Start</button><button class="btn outline" id="ntfLotPause" type="button">Pause</button><button class="btn outline" id="ntfLotReset" type="button">Reset</button></div></div>
+      </div></section>`;
+  }
+  function bindLottery(){
+    $('ntfLotDraw').onclick=drawLot;
+    $('ntfLotOpen').onclick=openLotNote;
+    $('ntfLotStart').onclick=startLot;
+    $('ntfLotPause').onclick=()=>stopLot(true);
+    $('ntfLotReset').onclick=resetLot;
+    $('ntfLotFilter').onchange=e=>{
+      if(lot.running)stopLot(true);
+      lot.filter=e.target.value||'__all__';lot.id='';lot.subject='';lot.seconds=FOCUS_SECS;persistTimer();paintLottery();
+    };
+    paintLottery();
+  }
+  /* restore a session that was running/paused before a reload */
+  (function restoreTimer(){
+    try{
+      const s=JSON.parse(localStorage.getItem(TIMER_KEY)||'null');
+      if(!s||!s.id||!findNote(s.id))return;
+      lot.id=s.id;lot.subject=s.subject||'';lot.filter=s.filter||'__all__';lot.seconds=Math.min(FOCUS_SECS,Math.max(0,s.seconds||FOCUS_SECS));
+      if(s.running&&s.endAt){
+        lot.seconds=Math.max(0,Math.round((s.endAt-Date.now())/1000));
+        if(lot.seconds>0){lot.running=true;lot.segStart=Date.now();lot.endAt=s.endAt;lot.handle=setInterval(tick,500)}
+        else{lot.seconds=1;lot.running=true;lot.segStart=Date.now()-1000;lot.endAt=Date.now();setTimeout(tick,50)}
+      }
+    }catch(e){}
+  })();
+  /* leaving the page while a session runs: save the time studied so far */
+  window.addEventListener('pagehide',()=>{if(lot.running){logFocusSegment();lot.segStart=Date.now();persistTimer()}});
+
+  function esc(v){
+    return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function load(){
+    try{
+      const d=JSON.parse(localStorage.getItem(KEY)||'{}');
+      return d&&typeof d==='object'&&!Array.isArray(d)?d:{};
+    }catch(e){return {}}
+  }
+  function save(d){
+    localStorage.setItem(KEY,JSON.stringify(d));
+    try{if(typeof window.queueCloudSave==='function')window.queueCloudSave()}catch(e){}
+  }
+  function topicKey(subject,group,topic){return subject+'|'+group+' › '+topic}
+  function topicNotes(d,subject,group,topic){
+    const key=topicKey(subject,group,topic);
+    return (Array.isArray(d[subject])?d[subject]:[]).filter(n=>String(n?.topic||'')===key);
+  }
+  function subjectTotal(d,subject){
+    return (Array.isArray(d[subject])?d[subject]:[]).filter(n=>String(n?.html||'').trim()).length;
+  }
+  function filteredGroups(subject){
+    const q=search.trim().toLowerCase();
+    if(!q)return subject.groups;
+    return subject.groups.map(g=>{
+      const groupMatch=g[0].toLowerCase().includes(q);
+      const topics=groupMatch?g[1]:g[1].filter(t=>t.toLowerCase().includes(q));
+      return [g[0],topics];
+    }).filter(g=>g[1].length);
+  }
+  function renderLibrary(){
+    const host=$('ntfLibrary');if(!host)return;
+    const d=load(),q=search.trim().toLowerCase();
+    const cards=[];
+    CATALOG.forEach(sub=>{
+      const groups=filteredGroups(sub);
+      if(q && !groups.length && !sub.name.toLowerCase().includes(q))return;
+      const visibleGroups=q&&sub.name.toLowerCase().includes(q)
+        ?sub.groups:groups;
+      cards.push(`<section class="ntf-subject-card">
+        <header class="ntf-subject-head">
+          <div><h2>${esc(sub.name)}</h2><small>${visibleGroups.reduce((n,g)=>n+g[1].length,0)} syllabus topics</small></div>
+          <span class="ntf-subject-count">${subjectTotal(d,sub.name)}</span>
+        </header>
+        <div class="ntf-groups">${visibleGroups.map(g=>{
+          const topics=g[1], groupNotes=topics.reduce((n,t)=>n+topicNotes(d,sub.name,g[0],t).length,0);
+          return `<details class="ntf-group" ${q?'open':''}>
+            <summary class="ntf-group-title"><span></span><span>${esc(g[0])}</span><span class="ntf-group-count">${groupNotes} saved</span></summary>
+            <div class="ntf-topic-grid">${topics.map(t=>{
+              const count=topicNotes(d,sub.name,g[0],t).length;
+              const isSel=selected.subject===sub.name&&selected.group===g[0]&&selected.topic===t;
+              return `<button type="button" class="ntf-topic-btn ${isSel?'is-selected':''}" data-open-topic="${esc(sub.name)}" data-open-group="${esc(g[0])}" data-open-topic-name="${esc(t)}">
+                <span class="ntf-topic-name">${esc(t)}</span><span class="ntf-topic-count ${count?'has-notes':''}">${count}</span>
+              </button>`;
+            }).join('')}</div>
+          </details>`;
+        }).join('')}</div>
+      </section>`);
+    });
+    host.innerHTML=cards.length?cards.join(''):'<div class="ntf-empty-search">No matching syllabus topic found.</div>';
+    $('ntfSearchCount').textContent=q?`${cards.length} subject${cards.length===1?'':'s'} match`:`${CATALOG.length} subjects`;
+    host.querySelectorAll('[data-open-topic]').forEach(b=>b.onclick=()=>{
+      openTopic(b.dataset.openTopic,b.dataset.openGroup,b.dataset.openTopicName);
+    });
+  }
+  function renderTopicNotes(){
+    const d=load(),notes=topicNotes(d,selected.subject,selected.group,selected.topic);
+    $('ntfNoteCount').textContent=`${notes.length} saved`;
+    $('ntfNoteList').innerHTML=notes.length?notes.map(n=>`
+      <div class="ntf-note-card">
+        <button type="button" class="ntf-note-open" data-open-note="${esc(n.id)}">
+          <strong>${esc(n.title||'Untitled Note')}</strong>
+          <small>${n.updatedAt?esc(new Date(n.updatedAt).toLocaleString()):''}</small>
+        </button>
+        <button type="button" class="ntf-note-edit" data-edit-note="${esc(n.id)}" title="Edit">✎</button>
+        <button type="button" class="ntf-note-delete" data-delete-note="${esc(n.id)}" title="Delete">×</button>
+      </div>`).join(''):`<div class="ntf-note-empty">No notes have been created for this topic yet.<br>Use <b>New Note</b> to create the first one.</div>`;
+    $('ntfNoteList').querySelectorAll('[data-open-note]').forEach(b=>b.onclick=()=>openSavedNote(b.dataset.openNote));
+    $('ntfNoteList').querySelectorAll('[data-edit-note]').forEach(b=>b.onclick=()=>editSavedNote(b.dataset.editNote));
+    $('ntfNoteList').querySelectorAll('[data-delete-note]').forEach(b=>b.onclick=()=>deleteSavedNote(b.dataset.deleteNote));
+  }
+  function openTopic(subject,group,topic,keepEditor=false){
+    selected={subject,group,topic};
+    editingId=keepEditor?editingId:'';
+    $('ntfLibraryWrap').style.display='none';
+    $('ntfWorkspace').classList.add('is-open');
+    $('ntfBreadcrumb').textContent=subject+'  /  '+group;
+    $('ntfTopicTitle').textContent=topic;
+    $('ntfTopicDescription').textContent='Notes saved here belong only to this syllabus topic.';
+    $('ntfEditorState').textContent='Select New Note to create a note specifically for this topic.';
+    clearEditor();
+    renderTopicNotes();
+    window.scrollTo(0,0);
+  }
+  function clearEditor(){
+    $('ntfTitle').value='';$('ntfHtml').value='';editingId='';
+    $('ntfStatus').textContent='No unsaved note';
+    $('ntfPreview').classList.add('hidden');
+    $('ntfSaveBtn').textContent='Save Note';
+  }
+  function newNote(){
+    editingId='';
+    $('ntfTitle').value=selected.topic+' Notes';
+    $('ntfHtml').value='';
+    $('ntfStatus').textContent='New note for '+selected.topic;
+    $('ntfEditorState').textContent='You are editing only: '+selected.topic;
+    $('ntfSaveBtn').textContent='Save Note';
+    $('ntfHtml').focus();
+  }
+  function editSavedNote(id){
+    const d=load(),arr=Array.isArray(d[selected.subject])?d[selected.subject]:[];
+    const n=arr.find(x=>x&&x.id===id);
+    if(!n)return;
+    editingId=id;
+    $('ntfTitle').value=n.title||'';
+    $('ntfHtml').value=n.html||'';
+    $('ntfStatus').textContent='Editing saved note. Saving updates this note.';
+    $('ntfEditorState').textContent='Editing note from: '+selected.topic;
+    $('ntfSaveBtn').textContent='Update Note';
+    $('ntfHtml').focus();
+  }
+  function saveNote(){
+    const html=$('ntfHtml').value.trim();
+    if(!html){$('ntfStatus').textContent='Add some HTML before saving.';return}
+    const title=$('ntfTitle').value.trim()||selected.topic+' Notes';
+    const wasEditing=!!editingId;
+    const d=load(),arr=Array.isArray(d[selected.subject])?d[selected.subject]:[];
+    const key=topicKey(selected.subject,selected.group,selected.topic);
+    if(editingId){
+      const idx=arr.findIndex(n=>n&&n.id===editingId);
+      if(idx>=0){
+        arr[idx]={...arr[idx],title,html,topic:key,updatedAt:new Date().toISOString()};
+      }else editingId='';
+    }
+    if(!editingId){
+      arr.unshift({id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html,topic:key,updatedAt:new Date().toISOString()});
+    }
+    d[selected.subject]=arr;save(d);
+    $('ntfEditorState').textContent='Saved under: '+selected.topic;
+    clearEditor();
+    $('ntfStatus').textContent=wasEditing?'Note updated successfully.':'Note saved successfully.';
+    renderTopicNotes();renderLibrary();
+  }
+  function deleteSavedNote(id){
+    const d=load(),arr=Array.isArray(d[selected.subject])?d[selected.subject]:[];
+    const n=arr.find(x=>x&&x.id===id);if(!n)return;
+    if(!confirm('Delete "'+(n.title||'this note')+'"?'))return;
+    d[selected.subject]=arr.filter(x=>x.id!==id);save(d);
+    renderTopicNotes();renderLibrary();
+  }
+  function openSavedNote(id){
+    const d=load(),arr=Array.isArray(d[selected.subject])?d[selected.subject]:[];
+    const n=arr.find(x=>x&&x.id===id);if(!n)return;
+    window._currentOpenNoteId=n.id;window._currentOpenNoteSubject=selected.subject;
+    if(typeof window.notesOpenReader==='function')window.notesOpenReader(n.id);
+    else{
+      $('notesScreen').classList.add('hidden');$('noteReaderScreen').classList.remove('hidden');
+      $('noteReaderTitle').textContent=n.title||'Untitled Note';
+      $('noteReaderSubject').textContent=selected.subject+' · '+selected.topic;
+      if(typeof window.mountNoteFrame==='function')window.mountNoteFrame($('noteReaderContent'),n.html||'');
+    }
+  }
+  function preview(){
+    const pane=$('ntfPreview'),body=$('ntfPreviewBody');if(!pane||!body)return;
+    if(typeof window.mountNoteFrame==='function')window.mountNoteFrame(body,$('ntfHtml').value||'');
+    else body.textContent=$('ntfHtml').value||'';
+    pane.classList.remove('hidden');
+  }
+  function backToLibrary(){
+    editingId='';$('ntfWorkspace').classList.remove('is-open');$('ntfLibraryWrap').style.display='';
+    renderLibrary();window.scrollTo(0,0);
+  }
+  function showNotes(){
+    if(typeof window.setActiveView==='function')try{window.setActiveView('notes')}catch(e){}
+    ['start','progressScreen','revisionScreen','planScreen','studyHubScreen','quickQuizScreen','noteReaderScreen','exam','confirm','result'].forEach(id=>$(id)?.classList.add('hidden'));
+    $('notesScreen').classList.remove('hidden');
+    $('notesScreen').innerHTML=`
+      <div class="notes-topic-first">
+        <header class="ntf-head">
+          <div><span class="ntf-kicker">PERSONAL KNOWLEDGE BASE</span><h1>Subject Notes</h1>
+          <p>Choose the exact syllabus topic you want to work on. Each topic has its own notes area, saved notes, and editor.</p></div>
+          <div class="ntf-head-actions"><span class="ntf-sync">Auto-synced</span><button class="btn outline" id="ntfHome" type="button">Back to Home</button></div>
+        </header>
+        ${lotteryHTML()}
+        <div class="ntf-searchbar"><input id="ntfSearch" type="search" placeholder="Search subjects, groups or topics..." autocomplete="off"><span class="ntf-search-meta" id="ntfSearchCount"></span></div>
+        <div id="ntfLibraryWrap"><div class="ntf-subject-grid" id="ntfLibrary"></div></div>
+        <section class="ntf-workspace" id="ntfWorkspace">
+          <header class="ntf-workspace-head">
+            <div><div class="ntf-breadcrumb" id="ntfBreadcrumb"></div><h2 id="ntfTopicTitle">Topic</h2><p id="ntfTopicDescription"></p></div>
+            <div class="ntf-workspace-actions"><button class="btn outline" id="ntfBack" type="button">← All Topics</button><button class="btn primary" id="ntfNew" type="button">+ New Note</button></div>
+          </header>
+          <div class="ntf-editor-grid">
+            <aside class="ntf-topic-notes"><div class="ntf-topic-notes-head"><strong>Notes for this topic</strong><span id="ntfNoteCount">0 saved</span></div><div class="ntf-note-list" id="ntfNoteList"></div></aside>
+            <main class="ntf-editor">
+              <div class="ntf-editor-state" id="ntfEditorState">Select New Note to create a note specifically for this topic.</div>
+              <div class="ntf-title-row"><label>Note title<input id="ntfTitle" maxlength="160" placeholder="e.g. Quick Revision Notes" type="text"></label></div>
+              <div class="ntf-html-label"><span>HTML editor</span><span class="ntf-html-hint">This editor belongs only to the selected topic</span></div>
+              <textarea class="ntf-html" id="ntfHtml" spellcheck="false" placeholder="<h2>Topic heading</h2>&#10;<p>Write your notes here...</p>"></textarea>
+              <div class="ntf-editor-bottom"><span class="ntf-status" id="ntfStatus">No unsaved note</span><div class="ntf-save-actions"><button class="btn outline" id="ntfPreviewBtn" type="button">Preview</button><button class="btn primary" id="ntfSaveBtn" type="button">Save Note</button></div></div>
+              <div class="ntf-preview hidden" id="ntfPreview"><div class="ntf-preview-head"><span>PREVIEW</span><button class="btn outline" id="ntfPreviewClose" type="button">Close</button></div><div class="ntf-preview-body" id="ntfPreviewBody"></div></div>
+            </main>
+          </div>
+        </section>
+      </div>`;
+    $('ntfHome').onclick=()=>{if(typeof window.setActiveView==='function')try{window.setActiveView('home')}catch(e){}$('notesScreen').classList.add('hidden');$('start').classList.remove('hidden');window.scrollTo(0,0)};
+    $('ntfSearch').oninput=e=>{search=e.target.value;renderLibrary()};
+    $('ntfBack').onclick=backToLibrary;
+    $('ntfNew').onclick=newNote;
+    $('ntfSaveBtn').onclick=saveNote;
+    $('ntfPreviewBtn').onclick=preview;
+    $('ntfPreviewClose').onclick=()=>$('ntfPreview').classList.add('hidden');
+    renderLibrary();
+    bindLottery();
+    window.scrollTo(0,0);
+  }
+  /* non-destructive entry used by background refresh / cloud sync: never wipes an open editor */
+  function showNotesSafe(){
+    const screen=$('notesScreen');
+    if(screen&&!screen.classList.contains('hidden')&&$('ntfLibrary')){renderLibrary();paintLottery();return}
+    showNotes();
+  }
+
+  // Keep the existing Notes home navigation, but replace the page with the topic-first UI.
+  window.notesV2Open=showNotesSafe;
+  window.notesOpen=showNotes;
+  const home=$('notesHomeBtn');if(home){home.onclick=e=>{e.preventDefault();e.stopPropagation();showNotes()}}
+
+  // Reader buttons return to the exact topic instead of the old common editor.
+  window.notesCloseReader=function(){
+    $('noteReaderScreen')?.classList.add('hidden');
+    showNotes();
+    if(window._currentOpenNoteId){
+      const d=load();
+      for(const sub of CATALOG){
+        const n=(d[sub.name]||[]).find(x=>x&&x.id===window._currentOpenNoteId);
+        if(n&&n.topic){
+          const parts=n.topic.split('|');const rest=parts.slice(1).join('|');
+          const sep=rest.indexOf(' › ');
+          const group=sep>=0?rest.slice(0,sep):'';
+          const topic=sep>=0?rest.slice(sep+3):rest;
+          openTopic(sub.name,group,topic);break;
+        }
+      }
+    }
+  };
+  window.notesEditOpenNote=function(){
+    const id=window._currentOpenNoteId;if(!id)return;
+    const d=load();
+    for(const sub of CATALOG){
+      const n=(d[sub.name]||[]).find(x=>x&&x.id===id);
+      if(!n)continue;
+      const parts=String(n.topic||'').split('|'),rest=parts.slice(1).join('|');
+      const sep=rest.indexOf(' › ');
+      const group=sep>=0?rest.slice(0,sep):'';
+      const topic=sep>=0?rest.slice(sep+3):rest;
+      if(group&&topic){
+        showNotes();openTopic(sub.name,group,topic,true);editSavedNote(id);
+      }
+      return;
+    }
+  };
+
+  // If the app was already on Notes when this patch loads, render immediately.
+  if(!$('notesScreen')?.classList.contains('hidden'))showNotes();
+})();
+</script>
+
+<script id="kaushal-notes-durable-backup">
+/* Notes safety net: every change to the notes store is mirrored into IndexedDB.
+   On load, anything missing from localStorage is restored from it (merged by note id / newest updatedAt),
+   then the normal cloud sync uploads it so all devices get it. */
+(function(){
+  'use strict';
+  const KEY='cgpsc_subject_html_notes_v2',DB='cgpsc_notes_backup',ST='kv';
+  function idb(){return new Promise((res,rej)=>{if(!window.indexedDB)return rej(0);const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(ST);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+  function put(v){return idb().then(db=>new Promise(res=>{const t=db.transaction(ST,'readwrite');t.objectStore(ST).put(v,KEY);t.oncomplete=()=>{db.close();res()};t.onerror=()=>{db.close();res()}})).catch(()=>{})}
+  function get(){return idb().then(db=>new Promise(res=>{const q=db.transaction(ST).objectStore(ST).get(KEY);q.onsuccess=()=>{db.close();res(q.result||null)};q.onerror=()=>{db.close();res(null)}})).catch(()=>null)}
+  const parse=t=>{try{const o=JSON.parse(t||'{}');return o&&typeof o==='object'&&!Array.isArray(o)?o:{}}catch(e){return {}}};
+  const count=o=>Object.values(o).reduce((n,a)=>n+(Array.isArray(a)?a.length:0),0);
+  /* mirror on every write to the notes key */
+  try{const orig=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){const r=orig.apply(this,arguments);if(k===KEY)put(String(v));return r}}catch(e){}
+  /* restore / merge once at startup */
+  get().then(raw=>{
+    if(!raw)return;
+    let live={};try{live=parse(localStorage.getItem(KEY))}catch(e){}
+    const bak=parse(raw);if(!count(bak))return;
+    const out={};let changed=false;
+    new Set([...Object.keys(live),...Object.keys(bak)]).forEach(s=>{
+      const m=new Map();(Array.isArray(live[s])?live[s]:[]).forEach(n=>n&&m.set(n.id,n));
+      (Array.isArray(bak[s])?bak[s]:[]).forEach(n=>{if(!n)return;const o=m.get(n.id);if(!o){m.set(n.id,n);changed=true}else if(Date.parse(n.updatedAt||0)>Date.parse(o.updatedAt||0)){m.set(n.id,n);changed=true}});
+      out[s]=[...m.values()];
+    });
+    if(changed){try{localStorage.setItem(KEY,JSON.stringify(out))}catch(e){return}
+      const ns=document.getElementById('notesScreen');if(ns&&!ns.classList.contains('hidden')&&typeof window.notesV2Open==='function')window.notesV2Open()}
+  });
+  /* make sure the current state is mirrored at least once */
+  try{const cur=localStorage.getItem(KEY);if(cur)put(cur)}catch(e){}
 })();
 </script>
 </body>
