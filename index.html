@@ -6555,6 +6555,54 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 })();
 </script>
 
+<script id="kaushal-test-time-logger">
+/* Adds the time spent inside a test (regular exam, Quick Quiz, question-bank practice, Exam Hall)
+   to the daily study hours (same log used by Plan > Study time and Progress). */
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const visible=id=>{const e=$(id);return !!e&&!e.classList.contains('hidden')};
+  let seg=0,kind='';
+  function testing(){
+    if(visible('examHallScreen'))return 'hall';
+    if(visible('exam')||visible('confirm'))return 'exam';
+    return '';
+  }
+  function fmt(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+'h '+m+'m':m?m+'m':s+'s'}
+  function toast(msg){
+    const old=$('kaushalTestToast');if(old)old.remove();
+    const t=document.createElement('div');t.id='kaushalTestToast';t.textContent=msg;
+    t.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:99998;max-width:90vw;padding:11px 16px;border-radius:12px;background:#24565A;color:#fff;font:600 13px/1.4 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.3)';
+    document.body.appendChild(t);setTimeout(()=>{try{t.remove()}catch(e){}},4500);
+  }
+  function refreshViews(){
+    try{if(visible('planScreen')&&typeof window.planRender==='function')window.planRender()}catch(e){}
+    try{if(visible('progressScreen')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}
+  }
+  /* log the time since the segment started; keepOpen=true continues a new segment (used when the page is hidden) */
+  function flush(keepOpen,announce){
+    if(!seg)return;
+    const secs=Math.floor((Date.now()-seg)/1000),k=kind;
+    seg=keepOpen?Date.now():0;if(!keepOpen)kind='';
+    if(secs<10||typeof window.kaushalLogStudyTime!=='function')return;
+    let q=0;if(k!=='hall'){try{q=(window.App&&App.questions&&App.questions.length)||0}catch(e){}}
+    window.kaushalLogStudyTime(secs,{cat:'Mock Test',topic:(k==='hall'?'Exam Hall test':'Test')+(q?' • '+q+' questions':''),src:'test'});
+    refreshViews();
+    if(announce)toast('⏱ '+fmt(secs)+' of test time added to today’s study hours');
+  }
+  function watch(){
+    const now=testing();
+    if(now&&!seg){seg=Date.now();kind=now}
+    else if(now&&seg&&kind!==now){flush(false,false);seg=Date.now();kind=now}
+    else if(!now&&seg){flush(false,true)}
+  }
+  setInterval(watch,1000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush(true,false)});
+  window.addEventListener('pagehide',()=>flush(true,false));
+  watch();
+})();
+</script>
+
 <script id="kaushal-notes-durable-backup">
 /* Notes safety net: every change to the notes store is mirrored into IndexedDB.
    On load, anything missing from localStorage is restored from it (merged by note id / newest updatedAt),
