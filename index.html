@@ -5751,7 +5751,8 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   try{renderLotteryFilter();renderSubjects();notesSelectSubject(selectedSubject);renderLotteryPool();updateTimerUI()}catch(e){console.warn('Notes V2 init:',e)}
 })();
 </script>
-\n<script id="kaushal-final-stability-pass">
+
+<script id="kaushal-final-stability-pass">
 (function(){
   'use strict';
   const $=id=>document.getElementById(id);
@@ -5790,7 +5791,8 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   })}
   fit();window.addEventListener('resize',fit,{passive:true});
 })();
-</script>\n
+</script>
+
 
 <style id="kaushal-notes-final-render-css">
 /* FINAL NOTES READER: keep saved notes visually consistent on desktop/mobile/WebView */
@@ -5822,8 +5824,9 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
    * controlled document instead.
    */
   function normalizeNoteHTML(raw){
+    const source=String(raw||'').replace(/\\n+/g,' ');
     const parser=new DOMParser();
-    const doc=parser.parseFromString(String(raw||''),'text/html');
+    const doc=parser.parseFromString(source,'text/html');
     const body=doc.body||doc.documentElement;
 
     body.querySelectorAll('script,iframe,object,embed,form,base,meta,link,noscript,style,template').forEach(e=>e.remove());
