@@ -5926,100 +5926,120 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   'use strict';
   const $=id=>document.getElementById(id);
 
-  function safeUrl(v){
-    const x=String(v||'').trim();
-    if(!x)return '';
-    const compact=x.replace(/[\u0000-\u0020\u00a0\u200b]/g,'').toLowerCase();
-    if(/^(javascript:|vbscript:|data:text\/html)/.test(compact))return '';
-    return x;
+  /* ---------- helpers ---------- */
+  function urlBad(v){
+    const c=String(v||'').replace(/[\u0000-\u0020\u00a0\u200b]/g,'').toLowerCase();
+    return /^(javascript:|vbscript:|data:text\/html)/.test(c);
+  }
+  /* 100vh inside an auto-height iframe makes the note grow forever and look "zoomed" - neutralise it */
+  function fixCss(css){
+    return String(css||'').replace(
+      /(min-height|height)\s*:\s*(?:100(?:\.\d+)?(?:d|s|l)?vh|calc\(\s*100(?:d|s|l)?vh[^;}]*\))/gi,
+      (m,p)=>p.toLowerCase()==='min-height'?'min-height:0':'height:auto'
+    );
+  }
+  function attrString(el){
+    return [...el.attributes].map(a=>a.name+'="'+String(a.value).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"').join(' ');
   }
 
-  /*
-   * Notes are saved exactly as entered so Edit Note never destroys the source.
-   * Reader rendering is intentionally normalized: AI-generated HTML often
-   * contains global CSS/body rules which make an embedded note look zoomed,
-   * shifted, tiny, or otherwise disoriented. We render semantic HTML in a
-   * controlled document instead.
-   */
-  function normalizeNoteHTML(raw){
-    const source=String(raw||'').replace(/\\n+/g,' ');
-    const parser=new DOMParser();
-    const doc=parser.parseFromString(source,'text/html');
-    const body=doc.body||doc.documentElement;
+  /* Light defaults ONLY. They come first and have no !important, so the note's own CSS always wins. */
+  const BASE_CSS=
+    '*,*::before,*::after{box-sizing:border-box}'+
+    'html{margin:0;padding:0;overflow-y:hidden;overflow-x:auto}'+
+    'body{margin:0;padding:26px 28px 34px;background:#fff;color:#172A2D;font:16px/1.72 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere}'+
+    'img,video,svg{max-width:100%;height:auto}'+
+    'table{border-collapse:collapse;max-width:100%}'+
+    'th,td{border:1px solid #D8E1DE;padding:9px 10px;vertical-align:top;text-align:left}'+
+    'th{background:#EEF3F2;font-weight:800}'+
+    'pre{max-width:100%;overflow:auto;white-space:pre-wrap}'+
+    'blockquote{margin:1em 0;padding:10px 16px;border-left:4px solid #D9C98B;background:#F7F4EA}'+
+    'a{color:#24565A}'+
+    '@media(max-width:700px){body{padding:18px 14px 28px;font-size:15px}}';
 
-    body.querySelectorAll('script,iframe,object,embed,form,base,meta,link,noscript,style,template').forEach(e=>e.remove());
+  /* Keeps the note's own <style>, classes, ids and inline styles. Only executable content is removed. */
+  function buildNoteDoc(raw){
+    let source=String(raw||'');
+    /* pasted JSON-escaped text (literal \n and no real line breaks) */
+    if(!/[\r\n]/.test(source)&&/\\n/.test(source))source=source.replace(/\\r?\\n/g,'\n');
+    const doc=new DOMParser().parseFromString(source,'text/html');
 
-    body.querySelectorAll('*').forEach(el=>{
+    doc.querySelectorAll('script,iframe,frame,frameset,object,embed,applet,form,base,noscript,template,title,meta[http-equiv]').forEach(x=>x.remove());
+    doc.querySelectorAll('link').forEach(l=>{
+      const rel=String(l.getAttribute('rel')||'').toLowerCase().split(/\s+/);
+      const href=l.getAttribute('href')||'';
+      if(!rel.includes('stylesheet')||urlBad(href)||!/^(https?:)?\/\//i.test(href.trim()))l.remove();
+    });
+    doc.querySelectorAll('*').forEach(el=>{
       [...el.attributes].forEach(a=>{
-        const name=a.name.toLowerCase();
-        const value=a.value||'';
-        if(name.startsWith('on')||name==='srcdoc'||name==='style'||name==='class'||name==='id'){
-          el.removeAttribute(a.name);return;
-        }
-        if(['href','src','xlink:href','action','formaction'].includes(name)){
-          const safe=safeUrl(value);
-          if(!safe)el.removeAttribute(a.name); else el.setAttribute(a.name,safe);
-        }
+        const n=a.name.toLowerCase();
+        if(n.startsWith('on')||n==='srcdoc'||n==='formaction'){el.removeAttribute(a.name);return}
+        if(['href','src','xlink:href','action','poster','background'].includes(n)&&urlBad(a.value)){el.removeAttribute(a.name);return}
+        if(n==='style')el.setAttribute('style',fixCss(a.value));
       });
     });
+    doc.querySelectorAll('style').forEach(st=>{st.textContent=fixCss(st.textContent)});
 
-    /* Prevent common malformed HTML from breaking the page layout. */
-    body.querySelectorAll('img').forEach(img=>{
-      img.removeAttribute('width');img.removeAttribute('height');
-      img.setAttribute('loading','lazy');
-    });
-    body.querySelectorAll('table').forEach(t=>{
-      t.removeAttribute('width');
-      const wrap=doc.createElement('div');wrap.setAttribute('data-note-table-wrap','1');
-      t.parentNode.insertBefore(wrap,t);wrap.appendChild(t);
-    });
+    const headExtra=[...(doc.head?doc.head.querySelectorAll('style,link'):[])].map(x=>x.outerHTML).join('');
+    if(doc.head)doc.head.querySelectorAll('style,link').forEach(x=>x.remove());
+    const ha=attrString(doc.documentElement),ba=attrString(doc.body);
 
-    const css=`
-      *{box-sizing:border-box}
-      html{margin:0;padding:0;background:transparent}
-      body{margin:0!important;padding:26px 28px 34px!important;background:#fff!important;color:#172A2D!important;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;font-size:16px!important;line-height:1.72!important;overflow-wrap:anywhere!important;word-break:normal!important}
-      body>div,body>section,body>article,body>main,body>header,body>footer{max-width:100%!important}
-      h1,h2,h3,h4,h5,h6{color:#173E42!important;line-height:1.25!important;margin:1.15em 0 .55em!important;font-weight:800!important}
-      h1{font-size:28px!important}h2{font-size:23px!important}h3{font-size:20px!important}h4{font-size:18px!important}h5,h6{font-size:16px!important}
-      p{margin:.65em 0!important}
-      ul,ol{margin:.7em 0!important;padding-left:1.6em!important}
-      li{margin:.3em 0!important}
-      strong,b{font-weight:800!important}em,i{font-style:italic!important}
-      blockquote{margin:1em 0!important;padding:12px 16px!important;border-left:4px solid #D9C98B!important;background:#F7F4EA!important;border-radius:8px!important}
-      code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace!important;background:#F1F4F3!important;padding:2px 5px!important;border-radius:5px!important}
-      pre{max-width:100%!important;overflow:auto!important;white-space:pre-wrap!important;background:#172A2D!important;color:#F5FAF8!important;padding:14px!important;border-radius:10px!important}
-      img{display:block!important;max-width:100%!important;height:auto!important;margin:12px auto!important}
-      [data-note-table-wrap]{width:100%!important;max-width:100%!important;overflow-x:auto!important;margin:14px 0!important;-webkit-overflow-scrolling:touch!important}
-      table{width:100%!important;max-width:100%!important;border-collapse:collapse!important;font-size:14px!important;background:#fff!important}
-      th{background:#173E42!important;color:#fff!important;font-weight:800!important;text-align:left!important}
-      th,td{border:1px solid #D8E1DE!important;padding:9px 10px!important;vertical-align:top!important;overflow-wrap:anywhere!important}
-      tr:nth-child(even) td{background:#F7F9F8!important}
-      a{color:#24565A!important;text-decoration:underline!important}
-      hr{border:0!important;border-top:1px solid #D8E1DE!important;margin:22px 0!important}
-      @media(max-width:700px){body{padding:18px 14px 28px!important;font-size:15px!important;line-height:1.68!important}h1{font-size:23px!important}h2{font-size:20px!important}h3{font-size:18px!important}table{font-size:12px!important}th,td{padding:7px 8px!important}}
-    `;
-    return '<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style></head><body>'+body.innerHTML+'</body></html>';
+    return '<!doctype html><html'+(ha?' '+ha:'')+'><head><meta charset="UTF-8">'+
+      '<style id="kaushal-note-base">'+BASE_CSS+'</style>'+headExtra+
+      '</head><body'+(ba?' '+ba:'')+'>'+doc.body.innerHTML+'</body></html>';
   }
 
   function mount(container,raw){
     if(!container)return;
+    if(container._notesCleanup){try{container._notesCleanup()}catch(e){}container._notesCleanup=null}
     container.innerHTML='';
     const frame=document.createElement('iframe');
     frame.className='kaushal-note-html-frame';
-    frame.setAttribute('sandbox','allow-same-origin');
+    frame.setAttribute('sandbox','allow-same-origin');   /* no scripts can run inside the note */
     frame.setAttribute('title','Saved note');
-    frame.setAttribute('scrolling','no');
-    frame.style.cssText='display:block;width:100%;height:240px;min-height:240px;border:0;background:transparent;overflow:hidden';
-    const resize=()=>{try{
+    frame.style.cssText='display:block;width:100%;height:240px;min-height:120px;border:0;background:#fff;border-radius:14px';
+
+    const measure=()=>{
+      const d=frame.contentDocument;if(!d||!d.documentElement||!d.body)return 0;
+      const root=d.documentElement,b=d.body,w=d.defaultView;
+      let h=Math.max(root.scrollHeight,b.scrollHeight);
+      if(h<=frame.clientHeight+1){          /* content may be SHORTER than the frame: measure the body box */
+        const r=b.getBoundingClientRect();
+        h=Math.ceil(r.bottom+(parseFloat(w.getComputedStyle(b).marginBottom)||0)+(w.scrollY||0));
+      }
+      if(root.scrollWidth>root.clientWidth+1)h+=16;   /* room for a horizontal scrollbar */
+      return h;
+    };
+    let raf=0;
+    const resize=()=>{
+      if(raf)return;
+      raf=requestAnimationFrame(()=>{raf=0;try{
+        const h=measure();
+        if(h&&Math.abs(h-frame.clientHeight)>2)frame.style.height=Math.max(120,h)+'px';
+      }catch(e){}});
+    };
+    let ro=null;
+    const onWinResize=()=>resize();
+    window.addEventListener('resize',onWinResize,{passive:true});
+    container._notesCleanup=()=>{window.removeEventListener('resize',onWinResize);if(ro){try{ro.disconnect()}catch(e){}}};
+
+    frame.addEventListener('load',()=>{
       const d=frame.contentDocument;if(!d)return;
-      const b=d.body,root=d.documentElement;
-      const h=Math.max(b?.scrollHeight||0,b?.offsetHeight||0,root?.scrollHeight||0,240);
-      frame.style.height=(h+2)+'px';
-    }catch(e){}};
-    frame.addEventListener('load',()=>{resize();setTimeout(resize,60);setTimeout(resize,250);setTimeout(resize,700);try{
-      if(window.ResizeObserver&&frame.contentDocument?.body){const ro=new ResizeObserver(resize);ro.observe(frame.contentDocument.body);frame._notesRO=ro}
-    }catch(e){}});
-    frame.srcdoc=normalizeNoteHTML(raw);
+      resize();[60,250,700,1500].forEach(t=>setTimeout(resize,t));
+      try{if(d.fonts&&d.fonts.ready)d.fonts.ready.then(resize)}catch(e){}
+      d.addEventListener('load',resize,true);   /* images finishing later */
+      try{if(window.ResizeObserver){ro=new ResizeObserver(resize);ro.observe(d.documentElement);ro.observe(d.body)}}catch(e){}
+      /* links: #anchors scroll the page, web links open in a new tab, nothing navigates away from the note */
+      d.addEventListener('click',ev=>{
+        const a=ev.target&&ev.target.closest?ev.target.closest('a[href]'):null;if(!a)return;
+        const href=(a.getAttribute('href')||'').trim();
+        ev.preventDefault();
+        if(href.charAt(0)==='#'){
+          let t=null;try{t=d.getElementById(decodeURIComponent(href.slice(1)))}catch(e){}
+          if(t)window.scrollTo({top:t.getBoundingClientRect().top+frame.getBoundingClientRect().top+window.scrollY-70,behavior:'smooth'});
+        }else if(/^https?:\/\//i.test(href)){window.open(href,'_blank','noopener,noreferrer')}
+      });
+    });
+    frame.srcdoc=buildNoteDoc(raw);
     container.appendChild(frame);
   }
 
@@ -6031,38 +6051,48 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     pane.classList.remove('hidden');
   };
 
-  /* One authoritative reader implementation. */
+  /* ---------- find a saved note by id in ANY subject key ----------
+     The old code only searched the legacy NOTES_SUBJECTS names (e.g. "Hindi", "Chhattisgarh General Studies"),
+     but notes are now stored under "General Studies", "Language", "Intelligence, Analytical & Logical Ability"...
+     so those notes were never found and the reader silently did nothing. */
+  function readStores(){
+    const out=[];
+    try{if(typeof window.notesLoad==='function')out.push(window.notesLoad())}catch(e){}
+    ['cgpsc_subject_html_notes_v2','cgpsc_subject_html_notes_v1'].forEach(k=>{
+      try{const o=JSON.parse(localStorage.getItem(k)||'{}');if(o&&typeof o==='object'&&!Array.isArray(o))out.push(o)}catch(e){}
+    });
+    return out;
+  }
+  function findNoteById(id){
+    const map=(typeof NOTES_LEGACY_MAP!=='undefined'&&NOTES_LEGACY_MAP)||{};
+    for(const store of readStores()){
+      for(const key of Object.keys(store||{})){
+        const arr=store[key];if(!Array.isArray(arr))continue;
+        const n=arr.find(x=>x&&String(x.id)===String(id));
+        if(n)return {...n,subject:map[key]||key};
+      }
+    }
+    return null;
+  }
+  window.notesFindById=findNoteById;
+
   window.notesOpenReader=function(id){
-    const load=typeof window.notesLoad==='function'?window.notesLoad:null;
-    const data=load?load():{};
-    let found=null;
-    const subjects=Array.isArray(window.NOTES_SUBJECTS)?window.NOTES_SUBJECTS:
-      (typeof NOTES_SUBJECTS!=='undefined'?NOTES_SUBJECTS:[]);
-    for(const subject of subjects){
-      const arr=Array.isArray(data[subject])?data[subject]:[];
-      const n=arr.find(x=>x&&String(x.id)===String(id));
-      if(n){found={...n,subject};break}
-    }
-    /* V2 notes store fallback */
-    if(!found){
-      try{
-        const d=JSON.parse(localStorage.getItem('cgpsc_subject_html_notes_v2')||'{}');
-        for(const subject of subjects){const n=(d[subject]||[]).find(x=>x&&String(x.id)===String(id));if(n){found={...n,subject};break}}
-      }catch(e){}
-    }
-    if(!found)return;
+    const found=findNoteById(id);
+    if(!found){console.warn('Note not found:',id);return}
     window._currentOpenNoteId=found.id;
     window._currentOpenNoteSubject=found.subject;
     window._editingNoteId='';
     ['start','progressScreen','revisionScreen','planScreen','studyHubScreen','quickQuizScreen','notesScreen','exam','confirm','result'].forEach(x=>$(x)?.classList.add('hidden'));
     $('noteReaderTitle').textContent=found.title||'Untitled Note';
-    $('noteReaderSubject').textContent=found.subject+(found.topic?' · '+found.topic:'');
+    let topicLabel='';
+    if(found.topic){const t=String(found.topic).split('|').slice(1).join('|');topicLabel=t.replace(' › ',' › ')}
+    $('noteReaderSubject').textContent=found.subject+(topicLabel?' · '+topicLabel:'');
     mount($('noteReaderContent'),found.html||'');
     $('noteReaderScreen')?.classList.remove('hidden');
     window.scrollTo(0,0);
   };
 
-  /* Edit loads the original source, not the normalized reader HTML. */
+  /* Edit loads the original source, not the rendered HTML. */
   window.notesEditOpenNote=function(){
     const id=window._currentOpenNoteId;
     if(!id)return;
@@ -6078,11 +6108,6 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     if(typeof window.notesV2Open==='function')window.notesV2Open();
     else {$('notesScreen')?.classList.remove('hidden');window.scrollTo(0,0)}
   };
-
-  /* Ensure V2 editor can be reached without exposing its private closure. */
-  if(typeof window.notesV2EditNote!=='function' && typeof window.notesEditOpenNote==='function'){
-    /* no-op: V2 implementation will publish the helper below when available */
-  }
 })();
 </script>
 
