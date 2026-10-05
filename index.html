@@ -2879,6 +2879,28 @@ body.theme-dark #start .study-nav-actions > button.nav-tile:focus-visible{outlin
 #start .bank-import-card .helper,
 #start #cloudSyncStatus{display:none!important}
 </style>
+
+<style id="study-time-progress-report-css">
+.progress-stat-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+.study-time-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.study-time-summary{background:var(--soft);border:1px solid var(--border);border-radius:14px;padding:14px}
+.study-time-summary small{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.study-time-summary b{display:block;color:var(--primary-dark);font-size:25px;line-height:1.2;margin-top:4px}
+.study-time-chart{height:220px;display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--border);padding:0 4px;overflow-x:auto}
+.study-time-column{height:100%;min-width:42px;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}
+.study-time-bar-wrap{height:165px;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.study-time-bar{width:min(28px,70%);min-height:2px;border-radius:7px 7px 2px 2px;background:var(--primary)}
+.study-time-value{font-size:9px;color:var(--muted);height:12px}
+.study-time-label{font-size:9px;color:var(--muted);white-space:nowrap}
+.study-time-breakdown{display:grid;gap:8px;margin-top:14px}
+.study-time-breakdown-row{display:grid;grid-template-columns:minmax(90px,1fr) 1fr 60px;gap:10px;align-items:center;font-size:11px}
+.study-time-breakdown-row span:first-child{font-weight:700;color:var(--text)}
+.study-time-track{height:8px;background:var(--track);border-radius:99px;overflow:hidden}
+.study-time-track span{display:block;height:100%;background:var(--gold);border-radius:99px}
+@media(max-width:1100px){.progress-stat-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.study-time-summary-grid{grid-template-columns:1fr}.study-time-chart{height:205px}.study-time-column{min-width:36px}.study-time-bar-wrap{height:150px}.progress-stat-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:430px){.progress-stat-grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <!-- ============================================================
@@ -2966,62 +2988,109 @@ body.theme-dark #start .study-nav-actions > button.nav-tile:focus-visible{outlin
 </div>
 <div aria-label="Revision section" class="screen hidden" id="revisionScreen"><div class="revision-shell"><header class="revision-header"><div><h1>Revision</h1><p>Your automatically compiled wrong answers. Review them, understand the explanation, and remove a question when you have mastered it.</p></div><div class="revision-header-actions"><button class="btn outline" id="revisionBackBtn" type="button">Back to Home</button></div></header><div class="revision-summary"><div class="revision-stat"><small>Questions to revise</small><b id="revisionTotal">0</b></div><div class="revision-stat"><small>Topics needing attention</small><b id="revisionTopicTotal">0</b></div><div class="revision-stat"><small>Most repeated topic</small><b id="revisionTopTopic">—</b></div><div class="revision-stat"><small>Last added</small><b id="revisionLastAdded">—</b></div></div><div class="revision-layout"><section class="revision-list"><div class="revision-list-head"><h2>Wrong answers</h2><span id="revisionListCount">0 saved</span></div><div class="revision-items" id="revisionItems"></div></section><aside class="revision-side"><h3>Focus topics</h3><p>Topics with the most missed questions are shown first so you can prioritize your revision time.</p><div id="revisionTopicBreakdown"></div></aside></div></div></div>
 <div aria-label="Subject Notes" class="screen hidden" id="notesScreen">
-<div class="notes-dashboard">
-<header class="notes-header">
-<div>
-<span class="notes-kicker">PERSONAL KNOWLEDGE BASE</span>
-<h1>Subject Notes</h1>
-<p>Create and maintain HTML notes separately for every subject. Notes are automatically saved and synced across your devices.</p>
-</div>
-<div class="notes-header-actions">
-<span class="notes-sync-badge" id="notesSyncBadge">☁ Auto-synced</span>
-<button class="btn outline" id="notesBackBtn" type="button">Back to Home</button>
-</div>
+<div class="notes-v2-shell">
+<header class="notes-v2-header">
+  <div>
+    <span class="notes-kicker">PERSONAL KNOWLEDGE BASE</span>
+    <h1>Subject Notes</h1>
+    <p>Organise your notes according to the official Question Paper 01 syllabus. Expand a subject, open its topic hierarchy, add notes, or let the lottery choose one of your saved notes for a focused 15-minute session.</p>
+  </div>
+  <div class="notes-v2-header-actions">
+    <span class="notes-sync-badge" id="notesSyncBadge">Auto-synced</span>
+    <button class="btn outline" id="notesBackBtn" type="button">Back to Home</button>
+  </div>
 </header>
-<section class="notes-workspace">
-<aside class="notes-subject-panel">
-<div class="notes-panel-head">
-<div><span>SUBJECTS</span><h2>Your notes</h2></div>
-<b id="notesSubjectCount">0/0</b>
-</div>
-<div class="notes-subject-list" id="notesSubjectList"></div>
-</aside>
-<main class="notes-editor-panel">
-<div class="notes-editor-head">
-<div>
-<span class="notes-current-label">CURRENT SUBJECT</span>
-<h2 id="notesCurrentSubject">Select a subject</h2>
-<p id="notesCurrentStatus">Choose a subject from the left to create or edit its notes.</p>
-</div>
-<div class="notes-editor-actions">
-<button class="btn outline" id="notesPreviewBtn" type="button">Preview</button>
-<button class="btn primary" id="notesSaveBtn" type="button">Save Notes</button>
-</div>
-</div>
-<div class="notes-title-row">
-<label>Note title
-            <input id="notesTitleInput" maxlength="160" placeholder="e.g. Fundamental Rights — Quick Revision" type="text"/>
-</label>
-</div>
-<div class="notes-format-strip">
-<span>HTML editor</span>
-<span>Use headings, lists, tables, links, <code>&lt;strong&gt;</code>, <code>&lt;em&gt;</code>, etc.</span>
-</div>
-<textarea class="notes-html-input" id="notesHtmlInput" placeholder="&lt;h2&gt;Topic&lt;/h2&gt;
+
+<section class="notes-v2-toolbar">
+  <div class="notes-v2-toolbar-copy">
+    <span class="notes-v2-eyebrow">FOCUS LOTTERY</span>
+    <h2>What should I study now?</h2>
+    <p>Draws only from notes you have already saved. The selected note starts a 15:00 focus timer.</p>
+  </div>
+  <div class="notes-lottery-controls">
+    <select id="notesLotterySubject" aria-label="Lottery subject filter">
+      <option value="__all__">All subjects</option>
+    </select>
+    <button class="btn primary" id="notesLotteryBtn" type="button">Draw Focus Note</button>
+  </div>
+</section>
+
+<section class="notes-lottery-card" id="notesLotteryCard">
+  <div class="lottery-status-row">
+    <div class="lottery-badge">FOCUS DRAW</div>
+    <span id="notesLotteryPool">0 saved notes available</span>
+  </div>
+  <div class="lottery-main">
+    <div class="lottery-selected">
+      <span class="lottery-label">SELECTED NOTE</span>
+      <h3 id="notesLotteryTitle">Add and save notes to start the lottery</h3>
+      <p id="notesLotterySubjectLabel">The draw will use your saved notes.</p>
+    </div>
+    <div class="focus-timer-card">
+      <span>15-MINUTE FOCUS</span>
+      <strong id="notesFocusTimer">15:00</strong>
+      <div class="focus-timer-track"><i id="notesFocusProgress"></i></div>
+      <div class="focus-timer-actions">
+        <button type="button" class="btn primary" id="notesFocusStartBtn">Start</button>
+        <button type="button" class="btn outline" id="notesFocusPauseBtn">Pause</button>
+        <button type="button" class="btn outline" id="notesFocusResetBtn">Reset</button>
+      </div>
+    </div>
+  </div>
+  <div class="lottery-note-actions">
+    <button type="button" class="btn outline" id="notesLotteryOpenBtn" disabled>Open Selected Note</button>
+  </div>
+</section>
+
+<section class="notes-v2-workspace">
+  <aside class="notes-v2-subject-panel">
+    <div class="notes-panel-head">
+      <div><span>OFFICIAL SYLLABUS</span><h2>Subjects & Topics</h2></div>
+      <b id="notesSubjectCount">0 notes</b>
+    </div>
+    <div class="notes-subject-list" id="notesSubjectList"></div>
+  </aside>
+
+  <main class="notes-v2-editor-panel">
+    <div class="notes-editor-head">
+      <div>
+        <span class="notes-current-label">CURRENT SUBJECT</span>
+        <h2 id="notesCurrentSubject">Select a subject</h2>
+        <p id="notesCurrentStatus">Choose a subject or topic from the syllabus tree.</p>
+      </div>
+      <div class="notes-editor-actions">
+        <button class="btn outline" id="notesPreviewBtn" type="button">Preview</button>
+        <button class="btn primary" id="notesSaveBtn" type="button">Save Notes</button>
+      </div>
+    </div>
+
+    <div class="notes-selected-topic" id="notesSelectedTopicCard">
+      <div><span>SELECTED TOPIC</span><strong id="notesSelectedTopic">No topic selected</strong></div>
+      <button type="button" class="btn outline" id="notesClearTopicBtn">Clear</button>
+    </div>
+
+    <div class="notes-title-row">
+      <label>Note title
+        <input id="notesTitleInput" maxlength="160" placeholder="e.g. Fundamental Rights — Quick Revision" type="text"/>
+      </label>
+    </div>
+    <div class="notes-format-strip">
+      <span>HTML editor</span>
+      <span>Use headings, lists, tables, links, <code>&lt;strong&gt;</code>, <code>&lt;em&gt;</code>, etc.</span>
+    </div>
+    <textarea class="notes-html-input" id="notesHtmlInput" placeholder="&lt;h2&gt;Topic&lt;/h2&gt;
 &lt;p&gt;Write your notes here...&lt;/p&gt;
 
 &lt;ul&gt;
   &lt;li&gt;Key point&lt;/li&gt;
   &lt;li&gt;Important fact&lt;/li&gt;
 &lt;/ul&gt;" spellcheck="false"></textarea>
-<div class="notes-preview-pane hidden" id="notesPreviewPane">
-<div class="notes-preview-head"><span>LIVE PREVIEW</span><button id="notesClosePreviewBtn" type="button">Close</button></div>
-<article class="notes-content" id="notesPreviewContent"></article>
-</div>
-<div class="notes-editor-footer">
-<span id="notesLastSaved">Not saved yet</span>
-</div>
-</main>
+    <div class="notes-preview-pane hidden" id="notesPreviewPane">
+      <div class="notes-preview-head"><span>LIVE PREVIEW</span><button id="notesClosePreviewBtn" type="button">Close</button></div>
+      <article class="notes-content" id="notesPreviewContent"></article>
+    </div>
+    <div class="notes-editor-footer"><span id="notesLastSaved">Not saved yet</span></div>
+  </main>
 </section>
 </div>
 </div>
@@ -3251,6 +3320,25 @@ body.theme-dark #start .study-nav-actions > button.nav-tile:focus-visible{outlin
 <div class="progress-stat-card"><span class="ps-icon">↗</span><div><small>This week</small><b id="progressWeekSolved">0</b><em id="progressWeekDelta">Questions solved</em></div></div>
 <div class="progress-stat-card"><span class="ps-icon">◷</span><div><small>Current streak</small><b id="progressStreak">0 days</b><em id="progressStreakHint">Keep solving daily</em></div></div>
 <div class="progress-stat-card"><span class="ps-icon">!</span><div><small>Revision queue</small><b id="progressRevisionCount">0</b><em id="progressRevisionHint">Wrong answers to revisit</em></div></div>
+<div class="progress-stat-card"><span class="ps-icon">◷</span><div><small>Study time</small><b id="progressStudyTime">0m</b><em id="progressStudyTimeHint">All logged sessions</em></div></div>
+</section>
+<section class="progress-section-card progress-study-time">
+<div class="progress-section-head">
+<div><h2>Study time report</h2><p>Combined study time from the Plan timer, manual Plan entries, and the Notes Focus Lottery timer.</p></div>
+<div class="progress-period-tabs">
+<button class="progress-period study-time-period active" data-study-period="daily" type="button">Daily</button>
+<button class="progress-period study-time-period" data-study-period="weekly" type="button">Weekly</button>
+<button class="progress-period study-time-period" data-study-period="monthly" type="button">Monthly</button>
+</div>
+</div>
+<div class="study-time-summary-grid">
+<div class="study-time-summary"><small>Today</small><b id="studyTimeToday">0m</b></div>
+<div class="study-time-summary"><small>This week</small><b id="studyTimeWeek">0m</b></div>
+<div class="study-time-summary"><small>This month</small><b id="studyTimeMonth">0m</b></div>
+</div>
+<div class="progress-chart-meta"><b id="studyTimeChartTitle">Last 14 days</b><span id="studyTimeChartTotal">0m</span></div>
+<div class="study-time-chart" id="studyTimeChart"></div>
+<div class="study-time-breakdown" id="studyTimeBreakdown"></div>
 </section>
 <section class="progress-section-card progress-activity">
 <div class="progress-section-head">
@@ -3943,6 +4031,26 @@ function progressRenderFiveDay(){
   $('progressFiveDayAccuracy').textContent=acc+'%';
   $('progressFiveDayActive').textContent=summary.active;
 }
+const STUDY_TIME_PROGRESS_PERIOD_KEY='cgpsc_study_time_progress_period_v1';
+let studyTimeProgressPeriod=storageGet(STUDY_TIME_PROGRESS_PERIOD_KEY,'daily')||'daily';
+function studyTimeFmt(sec){sec=Math.max(0,Math.round(sec||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return h?`${h}h ${m}m`:m?`${m}m`:`${sec}s`}
+function studyTimeRangeSum(start,end){const d=stLoad(),a=new Date(start.getFullYear(),start.getMonth(),start.getDate()),b=new Date(end.getFullYear(),end.getMonth(),end.getDate());return d.sessions.filter(s=>{const x=new Date(String(s.date)+'T00:00:00');return x>=a&&x<=b}).reduce((n,s)=>n+(Number(s.secs)||0),0)}
+function studyTimeDaySum(date){const k=trackerDate(date),d=stLoad();return d.sessions.filter(s=>s.date===k).reduce((n,s)=>n+(Number(s.secs)||0),0)}
+function studyTimeSeries(){const now=new Date(),out=[];if(studyTimeProgressPeriod==='daily'){for(let i=13;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);out.push({label:i===0?'Today':d.toLocaleDateString(undefined,{day:'numeric',month:'short'}),secs:studyTimeDaySum(d)})}}else if(studyTimeProgressPeriod==='weekly'){const ws=trackerStartOfWeek(now);for(let i=8;i>=0;i--){const start=new Date(ws);start.setDate(start.getDate()-i*7);const end=new Date(start);end.setDate(end.getDate()+6);out.push({label:i===0?'This week':start.toLocaleDateString(undefined,{day:'numeric',month:'short'}),secs:studyTimeRangeSum(start,end)})}}else{for(let i=5;i>=0;i--){const start=new Date(now.getFullYear(),now.getMonth()-i,1),end=new Date(now.getFullYear(),now.getMonth()-i+1,0);out.push({label:start.toLocaleDateString(undefined,{month:'short'}),secs:studyTimeRangeSum(start,end)})}}return out}
+function progressRenderStudyTime(){
+ const sessions=stLoad().sessions,all=sessions.reduce((n,s)=>n+(Number(s.secs)||0),0),now=new Date();
+ const today=studyTimeDaySum(now),weekStart=trackerStartOfWeek(now),week=studyTimeRangeSum(weekStart,now),month=studyTimeRangeSum(new Date(now.getFullYear(),now.getMonth(),1),now);
+ $('progressStudyTime').textContent=studyTimeFmt(all);$('progressStudyTimeHint').textContent=`${sessions.length} logged session${sessions.length===1?'':'s'}`;
+ $('studyTimeToday').textContent=studyTimeFmt(today);$('studyTimeWeek').textContent=studyTimeFmt(week);$('studyTimeMonth').textContent=studyTimeFmt(month);
+ const series=studyTimeSeries(),max=Math.max(1,...series.map(x=>x.secs));
+ $('studyTimeChartTitle').textContent=studyTimeProgressPeriod==='daily'?'Last 14 days':studyTimeProgressPeriod==='weekly'?'Last 9 weeks':'Last 6 months';
+ $('studyTimeChartTotal').textContent=studyTimeFmt(series.reduce((n,x)=>n+x.secs,0));
+ $('studyTimeChart').innerHTML=series.map(x=>`<div class="study-time-column" title="${esc(x.label+': '+studyTimeFmt(x.secs))}"><div class="study-time-value">${x.secs?studyTimeFmt(x.secs):'0m'}</div><div class="study-time-bar-wrap"><div class="study-time-bar" style="height:${x.secs?Math.max(3,Math.round(x.secs/max*100)):2}%"></div></div><div class="study-time-label">${esc(x.label)}</div></div>`).join('');
+ const baseStart=studyTimeProgressPeriod==='monthly'?new Date(now.getFullYear(),now.getMonth(),1):studyTimeProgressPeriod==='weekly'?trackerStartOfWeek(now):new Date(now.getFullYear(),now.getMonth(),now.getDate());
+ const by={};sessions.forEach(s=>{const dt=new Date(String(s.date)+'T00:00:00');if(dt>=baseStart&&dt<=now){const k=s.cat||'General';by[k]=(by[k]||0)+(Number(s.secs)||0)}});
+ const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,6),mx=rows[0]?.[1]||1;
+ $('studyTimeBreakdown').innerHTML=rows.length?rows.map(([k,v])=>`<div class="study-time-breakdown-row"><span>${esc(k)}</span><div class="study-time-track"><span style="width:${Math.max(3,Math.round(v/mx*100))}%"></span></div><b>${studyTimeFmt(v)}</b></div>`).join(''):'<div class="progress-empty">No study time logged for this period yet.</div>';
+}
 function progressRenderDashboard(){
   const all=progressAllTimeStats(),weekStart=trackerStartOfWeek(new Date()),week=trackerSumRange(weekStart,new Date()),revision=revisionMerge(App.revision,revisionLoad());
   const accuracy=all.solved?Math.round(all.correct/all.solved*100):0;
@@ -3962,7 +4070,7 @@ function progressRenderDashboard(){
   const streak=progressStreak();$('progressStreak').textContent=`${streak} day${streak===1?'':'s'}`;$('progressStreakHint').textContent=streak?'Keep the streak going':'Solve a question today';
   $('progressRevisionCount').textContent=revision.length;
   $('progressRevisionHint').textContent=revision.length?'Wrong answers to revisit':'Revision queue is clear';
-  progressRenderBigChart();progressRenderFiveDay();progressRenderPerformance();progressRenderConsistency();progressRenderTopics();progressRenderAttention();progressRenderRecent();
+  progressRenderBigChart();progressRenderFiveDay();progressRenderStudyTime();progressRenderPerformance();progressRenderConsistency();progressRenderTopics();progressRenderAttention();progressRenderRecent();
 }
 function progressOpenDashboard(){setActiveView('progress');trackerSetOpen(false);$('start').classList.add('hidden');$('revisionScreen').classList.add('hidden');$('planScreen').classList.add('hidden');$('studyHubScreen').classList.add('hidden');$('progressScreen').classList.remove('hidden');window.scrollTo(0,0);progressRenderDashboard()}
 function progressCloseDashboard(){setActiveView('home');$('progressScreen').classList.add('hidden');$('start').classList.remove('hidden');window.scrollTo(0,0);trackerRender()}
@@ -4074,7 +4182,8 @@ const stElapsed=()=>stT.acc+(stT.run?Date.now()-stT.since:0);
 function stFmt(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+'h '+m+'m':m?m+'m':s+'s'}
 function stPaintClock(){const e=$('stClock');if(!e)return;const s=Math.floor(stElapsed()/1000),p=n=>String(n).padStart(2,'0');e.textContent=p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60);if($('stSave'))$('stSave').disabled=s<10}
 function stMsg(t){const e=$('stMsg');e.textContent=t;clearTimeout(stMsgT);stMsgT=setTimeout(()=>e.textContent='',2600)}
-function stAdd(o){const d=stLoad();d.sessions.push({id:'s_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:o.date,secs:o.secs,cat:$('stCat').value||'General',topic:$('stTopic').value.trim(),at:new Date().toISOString(),src:o.src});stSave(d)}
+function stAdd(o){const d=stLoad();const cat=o.cat!==undefined?String(o.cat||'General'):($('stCat')?.value||'General');const topic=o.topic!==undefined?String(o.topic||''):($('stTopic')?.value.trim()||'');d.sessions.push({id:'s_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:o.date||trackerDate(new Date()),secs:Math.max(0,Math.floor(o.secs||0)),cat,topic,at:new Date().toISOString(),src:o.src||'timer'});stSave(d);return d.sessions[d.sessions.length-1]}
+window.kaushalLogStudyTime=function(secs,o={}){secs=Math.floor(Number(secs)||0);if(secs<1)return null;return stAdd({secs,date:o.date||trackerDate(new Date()),cat:o.cat||'General',topic:o.topic||'',src:o.src||'notes'})};
 function stDelete(id){const d=stLoad();d.sessions=d.sessions.filter(s=>s.id!==id);d.del[id]=new Date().toISOString();stSave(d);stRender()}
 function stInit(){
  if(stInited)return;stInited=true;
@@ -5352,5 +5461,260 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 })();
 </script>
 
+
+<style id="notes-v2-css">
+/* ============================================================
+   NOTES V2 — syllabus hierarchy + focus lottery
+   ============================================================ */
+.notes-v2-shell{width:min(1500px,calc(100% - 34px));margin:0 auto;padding:28px 0 60px}
+.notes-v2-header{display:flex;justify-content:space-between;align-items:flex-end;gap:22px;margin-bottom:18px}
+.notes-v2-header h1{margin:5px 0 7px;font-size:clamp(30px,4vw,46px);letter-spacing:-.04em}
+.notes-v2-header p{max-width:920px;margin:0;color:var(--muted);font-size:13px;line-height:1.65}
+.notes-v2-header-actions{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.notes-v2-toolbar,.notes-lottery-card,.notes-v2-subject-panel,.notes-v2-editor-panel{background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:20px}
+.notes-v2-toolbar{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px 20px;margin-bottom:14px}
+.notes-v2-eyebrow,.notes-lottery-label,.lottery-label,.notes-selected-topic>div>span{font-size:10px;font-weight:900;letter-spacing:.14em;color:var(--muted)}
+.notes-v2-toolbar h2{margin:3px 0 3px;font-size:20px}.notes-v2-toolbar p{margin:0;color:var(--muted);font-size:12px}
+.notes-lottery-controls{display:flex;gap:8px;align-items:center;flex-shrink:0}.notes-lottery-controls select{min-height:42px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);padding:0 11px;max-width:250px}
+.notes-lottery-card{padding:18px 20px;margin-bottom:16px;background:linear-gradient(135deg,var(--surface),rgba(217,201,139,.08))}
+.lottery-status-row{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px}.lottery-badge{padding:5px 9px;border-radius:999px;background:var(--gold);color:var(--primary-dark);font-size:9px;font-weight:900;letter-spacing:.1em}
+.lottery-main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:stretch;margin-top:14px}.lottery-selected{min-width:0;padding:12px 3px}.lottery-selected h3{margin:7px 0 4px;font-size:25px;line-height:1.2}.lottery-selected p{margin:0;color:var(--muted);font-size:12px}
+.focus-timer-card{padding:15px;border:1px solid var(--border);border-radius:16px;background:var(--soft);text-align:center}.focus-timer-card>span{font-size:9px;letter-spacing:.14em;font-weight:900;color:var(--muted)}.focus-timer-card strong{display:block;font-size:42px;line-height:1.05;margin:6px 0 9px;font-variant-numeric:tabular-nums;color:var(--primary-dark)}
+.focus-timer-track{height:7px;background:var(--track);border-radius:99px;overflow:hidden}.focus-timer-track i{display:block;height:100%;width:0;background:var(--progress);transition:width .25s linear}.focus-timer-actions{display:flex;gap:6px;justify-content:center;margin-top:11px}.focus-timer-actions .btn{padding:7px 11px;font-size:11px}
+.lottery-note-actions{display:flex;justify-content:flex-end;margin-top:10px}.lottery-note-actions .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.notes-v2-workspace{display:grid;grid-template-columns:390px minmax(0,1fr);gap:16px;align-items:start}.notes-v2-subject-panel{padding:15px;min-height:680px}.notes-v2-editor-panel{padding:21px;min-width:0}
+.notes-subject-list{display:grid;gap:7px;margin-top:12px}.notes-subject-group{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
+.notes-subject-group.active{border-color:rgba(36,86,90,.42);box-shadow:inset 3px 0 0 var(--primary)}
+.notes-subject-btn{width:100%;display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;border:0;background:transparent;color:var(--text);padding:12px 11px;text-align:left;cursor:pointer}.notes-subject-btn:hover{background:var(--soft)}
+.notes-subject-chevron{width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:var(--soft);font-weight:900}.notes-subject-name{font-size:13px;font-weight:850}.notes-subject-count{min-width:25px;height:24px;padding:0 7px;border-radius:999px;display:grid;place-items:center;background:var(--soft);font-size:10px;font-weight:800}
+.notes-topic-list{padding:3px 9px 10px 36px;border-top:1px solid var(--border);background:var(--soft)}.notes-topic-group{margin-top:7px}.notes-topic-group>summary{cursor:pointer;list-style:none;font-size:11px;font-weight:850;padding:7px 8px;border-radius:8px;color:var(--text)}.notes-topic-group>summary::-webkit-details-marker{display:none}.notes-topic-group>summary:before{content:'›';display:inline-block;width:15px;font-weight:900}.notes-topic-group[open]>summary:before{content:'⌄'}.notes-topic-group>summary:hover{background:var(--surface)}
+.notes-topic-items{display:grid;gap:4px;padding:2px 0 3px 17px}.notes-topic-item{display:flex;align-items:flex-start;gap:6px;width:100%;border:0;background:transparent;color:var(--muted);padding:6px 7px;border-radius:7px;text-align:left;font-size:10px;line-height:1.4;cursor:pointer}.notes-topic-item:before{content:'•';color:var(--primary);font-weight:900}.notes-topic-item:hover{background:var(--surface);color:var(--primary)}
+.notes-note-list{padding:4px 9px 10px 36px}.notes-note-row{display:flex;align-items:center;gap:5px;padding:5px 0}.notes-note-main{min-width:0;flex:1;border:0;background:transparent;text-align:left;color:var(--text);cursor:pointer}.notes-note-main strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}.notes-note-main small{color:var(--muted);font-size:9px}.notes-note-actions{display:flex;gap:3px}.notes-note-actions button{width:27px;height:27px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);cursor:pointer}.notes-note-actions button:hover{background:var(--soft)}
+.notes-editor-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;padding-bottom:16px;border-bottom:1px solid var(--border)}.notes-editor-head h2{margin:4px 0;font-size:26px}.notes-editor-head p{margin:0;color:var(--muted);font-size:12px}.notes-editor-actions{display:flex;gap:8px;flex-shrink:0}
+.notes-selected-topic{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:15px 0 5px;padding:11px 13px;border:1px dashed var(--border);border-radius:11px;background:var(--soft)}.notes-selected-topic strong{display:block;margin-top:2px;font-size:12px}.notes-selected-topic .btn{padding:6px 9px;font-size:10px}
+.notes-title-row{padding:13px 0 10px}.notes-title-row label{display:grid;gap:7px;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.notes-title-row input{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:11px;padding:12px 13px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;outline:none}
+.notes-title-row input:focus,.notes-html-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(36,86,90,.08)}.notes-format-strip{display:flex;justify-content:space-between;gap:12px;padding:9px 11px;background:var(--soft);border:1px solid var(--border);border-bottom:0;border-radius:11px 11px 0 0;color:var(--muted);font-size:10px}.notes-format-strip span:first-child{font-weight:900;color:var(--text)}
+.notes-html-input{display:block;width:100%;min-height:420px;box-sizing:border-box;resize:vertical;border:1px solid var(--border);border-radius:0 0 11px 11px;padding:15px;font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;background:#102225;color:#e8efed;outline:none}.notes-editor-footer{padding-top:11px;color:var(--muted);font-size:10px}.notes-empty{padding:12px 7px;color:var(--muted);font-size:10px}
+@media(max-width:1050px){.notes-v2-workspace{grid-template-columns:1fr}.notes-v2-subject-panel{min-height:0}.lottery-main{grid-template-columns:1fr 300px}}
+@media(max-width:700px){.notes-v2-shell{width:min(100% - 18px,700px);padding:16px 0 40px}.notes-v2-header{display:block}.notes-v2-header-actions{margin-top:12px}.notes-v2-toolbar{display:block;padding:15px}.notes-lottery-controls{margin-top:12px;display:grid;grid-template-columns:1fr}.notes-lottery-controls select{max-width:none;width:100%}.lottery-main{grid-template-columns:1fr}.notes-lottery-card{padding:15px}.lottery-selected h3{font-size:21px}.focus-timer-card strong{font-size:38px}.notes-v2-editor-panel{padding:15px}.notes-editor-head{display:block}.notes-editor-actions{margin-top:12px}.notes-editor-actions .btn{flex:1}.notes-html-input{min-height:360px}.notes-topic-list{padding-left:30px}}
+</style>
+
+<script id="notes-v2-js">
+(function(){
+  'use strict';
+  const $n=id=>document.getElementById(id);
+  const LEGACY_KEY='cgpsc_subject_html_notes_v1';
+  const V2_KEY='cgpsc_subject_html_notes_v2';
+  const TIMER_KEY='cgpsc_notes_focus_timer_v2';
+  const OPEN_KEY='cgpsc_notes_open_subjects_v2';
+  const TOPIC_KEY='cgpsc_notes_selected_topic_v2';
+  const SUBJECTS=[
+    {name:'General Studies',groups:[
+      ['History & Independence Movement',['History of Chhattisgarh','Role of Chhattisgarh in the Independence Movement']],
+      ['Geography, Environment & Heritage',['Geography','Physical Directions','Census','Archaeology','Places of Tourist Interest in Chhattisgarh']],
+      ['Art, Music, Dance & Culture',['History, Music, Dance, Art and Culture','Riddles and Proverbs','Local Proverbs of Chhattisgarh']],
+      ['Tribal Culture & Traditions',['Tribal and Special Traditions','Festivals of Chhattisgarh']],
+      ['Economy, Forest & Agriculture',['Economy of Chhattisgarh','Forest of Chhattisgarh','Agriculture of Chhattisgarh']],
+      ['Administration & Panchayati Raj',['Administrative Setup','Local Administration','Panchayati Raj in Chhattisgarh']],
+      ['Industries, Energy, Water & Minerals',['Industries','Energy','Water Resources','Mineral Resources']],
+      ['Current Affairs',['Current Affairs of Chhattisgarh']]
+    ]},
+    {name:'Language',groups:[
+      ['General Hindi',['Comprehension and Understanding','Précis Writing','Synonyms and Antonyms','Homonyms and their Meaning','Meaningful Words for a Phrase','Vocabulary and Usage','Compound Words and their Separation','Words Taken from Sanskrit','Word and Sentence Correction','Prefix and Suffixes','Proverbs: Meaning and Use','Letter Writing','History of Hindi Literature','Writers of Chhattisgarh and their Works']],
+      ['General English',['Comprehension','Précis Writing','Re-arrangement and Correction of Sentences','Synonyms and Antonyms','Filling the Blanks','Correction of Spellings','Vocabulary and Usage','Idioms and Phrases','Tenses','Prepositions','Active and Passive Voice','Parts of Speech','English to Hindi Translation','Letter Writing']],
+      ['Chhattisgarhi Language',['Knowledge of Chhattisgarhi Language','History and Development of Chhattisgarhi Language','Chhattisgarhi Literature and Laureates','Chhattisgarhi Grammar','Hindi to Chhattisgarhi Translation','Chhattisgarhi to Hindi Administrative Dictionary']]
+    ]},
+    {name:'Intelligence, Analytical & Logical Ability',groups:[
+      ['Core Areas',['Communication Skills and Mutual Skills','Logical Reasoning and Ability to Analyze','Decision Making','Development and Problem Solving','General Mental Ability']],
+      ['Basic Statistical Works',['General Mathematics Ability: Class X Level','Analysis of Numbers','Charts','Underlines','Tables']]
+    ]},
+    {name:'Chemistry',groups:[
+      ['Chemical Reactions & Equilibrium',['Rate of Chemical Reaction','Fast and Slow Chemical Reactions','Reversible and Irreversible Chemical Reactions','Dynamic Nature of Equilibrium','Acids and Bases','pH Scale and Simple Numericals','Exothermic and Endothermic Reactions']],
+      ['Important Compounds & Materials',['Water','Washing Soda','Baking Soda','Bleaching Powder','Plaster of Paris','Lime','Cement','Glass','Steel']],
+      ['Metals & Metallurgy',['Position of Metals in Periodic Table','General Properties of Metals','Metal, Mineral and Ore','Difference Between Mineral and Ore','Concentration of Ores','Roasting','Smelting','Refining','Metallurgy of Copper and Iron','Corrosion of Metals','Alloys']],
+      ['Nonmetals',['Position of Nonmetals in Periodic Table','Hydrogen: Preparation, Properties and Uses','Oxygen: Preparation, Properties and Uses','Nitrogen: Preparation, Properties and Uses']],
+      ['Organic Compounds & Polymers',['Alcohol','Acetic Acid','Artificial Polymers','Polythene','Polyvinyl Chloride','Teflon','Soap and Detergents']]
+    ]},
+    {name:'Physics',groups:[
+      ['Sources of Energy',['Conventional and New Sources of Energy','Solar Energy','Origin of Energy in the Sun','Solar Heating Devices','Solar Cooker','Solar Cell','Wind Energy','Biogas','Fossil Fuels','Ideal Fuel and Its Properties','Nuclear Energy','Nuclear Fission and Fusion','Chain Reaction','Nuclear Reactor','Uses and Harms of Nuclear Energy','CREDA']],
+      ['Light',['Nature of Light','Laws of Reflection','Plane and Curved Surfaces','Plane, Convex and Concave Mirrors','Image Formation','Focal Length and Radius of Curvature','Single Pin Method for Concave Mirror','u-v-f Relation and Numericals','Refraction and Laws of Refraction','Glass Slab','Critical Angle','Total Internal Reflection','Lenses','Human Eye and Defects','Camera and Human Eye','Simple and Astronomical Telescope']],
+      ['Electricity & Effects',['Electric Intensity','Potential and Potential Difference','Electric Current','Ohm’s Law','Resistance and Specific Resistance','Combination of Resistance','Thermal Effect of Current','Power and Electrical Energy','Chemical Effects of Electric Current','Primary and Secondary Cells','Leclanche Cell','Dry Cell','Lead Accumulator Cell']],
+      ['Magnetic Effects & Magnetism',['Oersted Experiment','Electromagnetic Induction','Electric Motor','Generator','Alternating and Direct Current','Electric Discharge in Gases','Discharge Tube','Cathode Rays','X-rays','Magnets and Types','Preparation of Artificial Magnets','Molecular Theory of Magnetism','Demagnetization','Magnetic Keepers','Magnetic Lines of Force','Terrestrial Magnetism','Magnetic Storm','Magnetic and Geographical Meridian','Relation between VHI and Ø']]
+    ]},
+    {name:'Biology',groups:[
+      ['Animal Nutrition & Digestion',['Types of Nutrition','Autotrophic and Heterotrophic Nutrition','Holozoic, Parasitic, Saprophytic and Symbiotic Nutrition','Insectivorous Nutrition','Terms of Nutrition Process','Digestion in Amoeba','Digestion in Grasshopper','Human Digestive System and Process']],
+      ['Photosynthesis',['Light Reaction','Dark Reaction','Factors Influencing Photosynthesis','Experiments Related to Photosynthesis']],
+      ['Respiration',['Respiratory Organs of Animals','Breathing and Respiration','Aerobic and Anaerobic Respiration','Human Respiratory System','Mechanism of Respiration','Respiratory Quotient of Carbohydrate, Fat and Protein']],
+      ['Transport & Circulation',['Transport of Mineral and Water in Plants','Human Blood: Composition and Function','Heart Structure and Working','Blood Vessels','Blood Coagulation','Blood Groups','Blood Transfusion','Blood Bank','Lymph System','Heart-related Diseases']],
+      ['Excretion & Osmoregulation',['Excretion in Plants','Excretory Products','Excretion in Animals and Excretory Organs','Human Excretory System','Dialysis and Artificial Kidney','Osmoregulation','Kidney-related Diseases']],
+      ['Control & Coordination',['Plant Phytohormones','Human Nervous System','Brain Structure and Function','Spinal Cord','Reflex Action','Endocrine Glands','Hormones and Their Functions']],
+      ['Reproduction & Growth',['Asexual Reproduction','Fission and Budding','Regeneration','Vegetative Reproduction','Layering, Cutting and Grafting','Parthenogenesis','Sexual Reproduction in Plants','Flower Structure','Pollination and Fertilization','Human Reproductive System and Reproduction Process']],
+      ['Heredity & Evolution',['Heredity and Variation','Chromosomes','DNA','Genes','Sex Determination','Organic Evolution','Oparin’s Theory']]
+    ]},
+    {name:'Technology',groups:[
+      ['Science & Technology Policy',['National Policy of Science and Technology','Changes in Science and Technology Policy','Purpose of Technology']],
+      ['Space Programme',['Space Programme in India','Industrial Applications','Agricultural Applications','Rural Development Applications','INSAT','IRS Systems']],
+      ['Information Technology',['Role of IT in Rural India','Basics of Computers','Computers in Communication and Broadcasting','Software Development for Economic Growth','Broad Applications of IT']],
+      ['Energy Resources',['Energy Demands','Renewable and Non-renewable Energy Resources','Nuclear Energy and Its Development and Utilization']],
+      ['Agricultural Science & Current Developments',['Current Science and Technology Developments in India','Origin of Agriculture','Progress of Agricultural Science','Impact of Agricultural Science','Crop Science in India','Fertilizers','Pest and Disease Control Scenario in India']]
+    ]},
+    {name:'Environment',groups:[
+      ['Biodiversity & Conservation',['Definition and Introduction','Species Diversity','Genetic Diversity','Biogeographic Classification of India','Importance of Biodiversity','Constructive and Destructive Applications','Social, Moral and Alternative Vision','Global, National and Local Biodiversity','India as a Wide Diversity Nation','Biodiversity Hotspots','Threats to Biodiversity','Habitat Damage','Wildlife Damage','Human-wildlife Conflict','Threatened and Endangered Species of India','Local Species','In-situ and Ex-situ Conservation']],
+      ['Environmental Pollution',['Air Pollution','Water Pollution','Soil Pollution','Sound/Noise Pollution','Thermal Pollution','Nuclear Pollution','Causes, Effects and Control']],
+      ['Solid Waste Management',['Urban Solid Waste','Industrial Solid Waste','Causes, Effects and Control','Human Role in Pollution Control']],
+      ['Disaster Management',['Floods','Earthquakes','Cyclones','Landslides']],
+      ['Human Population & Environment',['Population Growth','Population Variation Among Countries','Population Explosion','Family Welfare Programme','Environment and Human Health']]
+    ]},
+    {name:'Agriculture',groups:[
+      ['Ecology, Resources & Crop Production',['Ecology and Its Relevance to Man','Natural Resources and Sustainable Management','Physical and Social Environment','Climatic Elements and Crop Growth','Changing Environment and Cropping Pattern','Environmental Pollution and Hazards to Crops, Animals and Humans']],
+      ['Cropping Systems & Agro-climatic Zones',['Cropping Pattern in Agro-climatic Zones','High-yielding and Short-duration Varieties','Multiple Cropping','Multistorey Cropping','Relay Cropping','Intercropping']],
+      ['Crop Production Practices',['Cereals','Pulses','Oilseeds','Fibres','Sugar Crops','Commercial Crops','Fodder Crops','Kharif Crops','Rabi Crops']],
+      ['Forestry Plantations',['Extension Forestry','Social Forestry','Agroforestry','Natural Forests']],
+      ['Weed Management',['Weed Characteristics','Dissemination and Crop Association','Multiplication of Weeds','Cultural Control','Biological Control','Chemical Control']],
+      ['Soil Science & Fertility',['Physical, Chemical and Biological Properties of Soil','Soil Formation','Indian Soil Classification','Mineral and Organic Constituents','Essential Plant Nutrients','Beneficial Elements','Soil Fertility and Its Evaluation','Judicious Fertilizer Use','Integrated Nutrient Management','Nitrogen Losses','Nitrogen-use Efficiency in Submerged Rice','Nitrogen Fixation','Phosphorus and Potassium Fixation','Efficient Nutrient Use']],
+      ['Problem Soils & Conservation',['Problem Soils and Reclamation','Watershed-based Soil Conservation','Erosion and Run-off in Hilly, Foothill and Valley Lands','Dryland Agriculture','Stabilising Rain-fed Agriculture']],
+      ['Irrigation & Drainage',['Water-use Efficiency','Irrigation Scheduling','Reducing Run-off Losses','Drip Irrigation','Sprinkler Irrigation','Drainage of Waterlogged Soils','Quality of Irrigation Water','Industrial Effluents and Soil/Water Pollution']],
+      ['Farm Management & Economics',['Scope and Characteristics of Farm Management','Farm Planning','Optimum Resource Use','Budgeting','Economics of Farming Systems','Marketing and Pricing','Price Fluctuations and Cost','Cooperatives','Types and Systems of Farming','Factors Affecting Farming Systems']],
+      ['Agricultural Extension & Mechanization',['Importance and Role of Extension','Evaluation of Extension Programmes','Socioeconomic Survey','Big, Small and Marginal Farmers','Landless Agricultural Labourers','Farm Mechanization','Rural Employment','Training Programmes','Lab-to-Land Programmes']],
+      ['Genetics, Cell Biology & Plant Breeding',['Cell Theory and Cell Structure','Cell Organelles','Cell Division','Nucleic Acids','Gene Structure and Function','Laws of Heredity','Chromosome Structure','Chromosomal Aberrations','Linkage and Crossing-over','Polyploidy, Euploidy and Aneuploidy','Mutation','Variation and Components of Variation','Heritability','Sterility and Incompatibility','Cytoplasmic Inheritance','Sex-linked, Sex-influenced and Sex-limited Characters','History of Plant Breeding','Selfing and Crossing','Origin and Evolution of Crop Plants','Centres of Origin','Law of Homologous Series','Genetic Resources','Pure-line, Pedigree, Mass and Recurrent Selection','Combining Ability','Hybrid Vigour','Backcross Breeding','Disease and Pest Resistance','Interspecific and Intergeneric Hybridization','Biotechnology in Plant Breeding','Improved Varieties, Hybrids and Composites']],
+      ['Seed Technology',['Importance of Seed Technology','Kinds of Seeds','Seed Production','Seed Processing','Public and Private Sector Role in Seed Production, Processing and Marketing']],
+      ['Plant Physiology',['Imbibition','Surface Tension','Diffusion and Osmosis','Water Absorption and Translocation','Transpiration and Water Economy','Enzymes and Plant Pigments','Photosynthesis and Factors Affecting It','Aerobic and Non-aerobic Respiration','C, C and CAM Mechanisms','Carbohydrate Metabolism','Protein Metabolism','Fat Metabolism','Growth and Development','Photoperiodism','Vernalization','Auxins and Other Plant Regulators','Seed Development and Germination','Dormancy']],
+      ['Horticulture',['Climatic Requirements and Cultivation of Major Fruits','Vegetable Crops','Flower Plants','Package of Practices','Handling and Marketing of Fruits and Vegetables','Preservation Methods','Processing Techniques and Equipment','Role in Human Nutrition','Ornamental Plants','Lawns and Gardens']],
+      ['Plant Pests & Diseases',['Diseases and Pests of Field Crops','Vegetable, Orchard and Plantation Crops','Causes and Classification','Principles of Control','Biological Control','Integrated Pest and Disease Management','Epidemiology and Forecasting','Pesticides and Formulations','Modes of Action','Compatibility with Rhizobial Inoculants','Microbial Toxins','Storage Pests and Diseases of Cereals and Pulses']],
+      ['Food Production & Policy',['Food Production and Consumption Trends','National and International Food Policies','Production, Procurement, Distribution and Processing Constraints','National Dietary Pattern','Calorie Deficiency','Protein Deficiency']]
+    ]},
+    {name:'Forestry',groups:[
+      ['Silviculture',['Silviculture — General','Silviculture Systems','Silviculture of Mangrove and Cold Desert','Silviculture of Trees']],
+      ['Agroforestry, Social Forestry & JFM',['Agroforestry','Social Forestry','Joint Forest Management','Tribology']],
+      ['Forest Soil & Watershed',['Forest Soil','Soil Conservation','Watershed Management']],
+      ['Environment & Biodiversity',['Environment Conservation','Biodiversity','Pollution']],
+      ['Tree Improvement & Technology',['Tree Improvement','Forestry Technology']],
+      ['Forest Management & Working Plan',['Forest Management','Management Systems','Forest Working Plan']],
+      ['Mensuration, Remote Sensing & Survey',['Forest Mensuration','Remote Sensing','Survey','Forest Engineering']],
+      ['Ecology & Ethnobotany',['Forest Ecology','Ethno Botany']],
+      ['Utilisation, Protection & Wildlife',['Forest Resources Utilisation','Forest Protection','Wildlife Biology']],
+      ['Economics & Legislation',['Forest Economics','Forest Legislation']]
+    ]}
+  ];
+
+  function escV2(v){return String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]))}
+  function safeJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))}catch(e){return fallback}}
+  function saveJSON(key,val){try{localStorage.setItem(key,JSON.stringify(val));if(typeof queueCloudSave==='function')queueCloudSave()}catch(e){}}
+  function subjectsByName(){const o={};SUBJECTS.forEach(s=>o[s.name]=s);return o}
+  const SUBJECT_MAP=subjectsByName();
+
+  function migrateNotes(){
+    let v=safeJSON(V2_KEY,null);
+    if(v&&typeof v==='object'&&!Array.isArray(v))return v;
+    const old=safeJSON(LEGACY_KEY,{}), out={};
+    Object.keys(old||{}).forEach(k=>{
+      const map={'Chhattisgarh General Studies':'General Studies','Hindi':'Language','English':'Language','Chhattisgarhi':'Language','Reasoning & Logical Ability':'Intelligence, Analytical & Logical Ability','Mental Ability':'Intelligence, Analytical & Logical Ability','Mathematics & Statistics':'Intelligence, Analytical & Logical Ability'};
+      const nk=map[k]||k;
+      if(!SUBJECT_MAP[nk])return;
+      out[nk]=[...(out[nk]||[]),...(Array.isArray(old[k])?old[k]:[])];
+    });
+    SUBJ_KEYS: for(const s of SUBJECTS){if(!out[s.name])out[s.name]=[]}
+    saveJSON(V2_KEY,out);return out;
+  }
+  function notesData(){const d=migrateNotes();SUBJECTS.forEach(s=>{if(!Array.isArray(d[s.name]))d[s.name]=[]});return d}
+  function totalNotes(d){return SUBJECTS.reduce((n,s)=>n+(Array.isArray(d[s.name])?d[s.name].filter(x=>String(x?.html||'').trim()).length:0),0)}
+  function notePool(filter){const d=notesData(), pool=[];SUBJECTS.forEach(s=>{if(filter!=='__all__'&&s.name!==filter)return;(d[s.name]||[]).forEach(n=>{if(n&&String(n.html||'').trim())pool.push({...n,subject:s.name})})});return pool}
+
+  let selectedSubject='General Studies';
+  let selectedTopic='';
+  let selectedNoteId='';
+  let timerSeconds=900;
+  let timerRunning=false;
+  let timerHandle=null;
+  let notesFocusSegmentStartedAt=0;
+
+  const savedOpen=safeJSON(OPEN_KEY,['General Studies']);
+  let openSubjects=new Set(Array.isArray(savedOpen)?savedOpen.filter(x=>SUBJECT_MAP[x]):['General Studies']);
+  selectedTopic=String(localStorage.getItem(TOPIC_KEY)||'');
+
+  function saveOpen(){saveJSON(OPEN_KEY,[...openSubjects])}
+  function subjectCount(name,d){return (d[name]||[]).filter(n=>String(n?.html||'').trim()).length}
+  function renderLotteryFilter(){
+    const sel=$n('notesLotterySubject');if(!sel)return;const old=sel.value||'__all__';
+    sel.innerHTML='<option value="__all__">All subjects</option>'+SUBJECTS.map(s=>`<option value="${escV2(s.name)}">${escV2(s.name)}</option>`).join('');
+    sel.value=SUBJECT_MAP[old]?old:'__all__';
+  }
+  function renderSubjects(){
+    const list=$n('notesSubjectList');if(!list)return;const d=notesData();
+    const total=totalNotes(d);$n('notesSubjectCount').textContent=`${total} note${total===1?'':'s'}`;
+    list.innerHTML=SUBJECTS.map(s=>{
+      const open=openSubjects.has(s.name),active=s.name===selectedSubject,notes=d[s.name]||[];
+      const groups=s.groups.map((g,gi)=>`<details class="notes-topic-group" data-topic-group="${escV2(s.name+'|'+g[0])}" ${selectedTopic.startsWith(s.name+'|'+g[0])?'open':''}><summary>${escV2(g[0])}</summary><div class="notes-topic-items">${g[1].map(t=>`<button type="button" class="notes-topic-item" data-topic-subject="${escV2(s.name)}" data-topic="${escV2(g[0]+' › '+t)}">${escV2(t)}</button>`).join('')}</div></details>`).join('');
+      const noteRows=notes.length?`<div class="notes-note-list">${notes.map(n=>`<div class="notes-note-row"><button type="button" class="notes-note-main" data-open-note-v2="${escV2(n.id)}"><strong>${escV2(n.title||'Untitled Note')}</strong><small>${n.updatedAt?escV2(new Date(n.updatedAt).toLocaleDateString()):''}</small></button><div class="notes-note-actions"><button type="button" data-edit-note-v2="${escV2(n.id)}" title="Edit">✎</button><button type="button" data-delete-note-v2="${escV2(n.id)}" title="Delete">×</button></div></div>`).join('')}</div>`:'<div class="notes-empty">No saved notes under this subject.</div>';
+      return `<div class="notes-subject-group ${active?'active':''}"><button type="button" class="notes-subject-btn ${active?'active':''}" data-subject-v2="${escV2(s.name)}" aria-expanded="${open}"><span class="notes-subject-chevron">${open?'⌄':'›'}</span><span class="notes-subject-name">${escV2(s.name)}</span><span class="notes-subject-count">${notes.length}</span></button>${open?`<div class="notes-topic-list">${groups}<div class="notes-note-heading">SAVED NOTES</div>${noteRows}</div>`:''}</div>`;
+    }).join('');
+    list.querySelectorAll('[data-subject-v2]').forEach(b=>b.onclick=()=>{const s=b.dataset.subjectV2;selectedSubject=s;if(openSubjects.has(s))openSubjects.delete(s);else openSubjects.add(s);saveOpen();renderSubjects();notesSelectSubject(s)})
+    list.querySelectorAll('[data-topic-subject]').forEach(b=>b.onclick=()=>{selectedSubject=b.dataset.topicSubject;selectedTopic=selectedSubject+'|'+b.dataset.topic;localStorage.setItem(TOPIC_KEY,selectedTopic);openSubjects.add(selectedSubject);saveOpen();notesSelectSubject(selectedSubject,b.dataset.topic)})
+    list.querySelectorAll('[data-open-note-v2]').forEach(b=>b.onclick=()=>openReaderV2(b.dataset.openNoteV2))
+    list.querySelectorAll('[data-edit-note-v2]').forEach(b=>b.onclick=()=>editNoteV2(b.dataset.editNoteV2))
+    list.querySelectorAll('[data-delete-note-v2]').forEach(b=>b.onclick=()=>deleteNoteV2(b.dataset.deleteNoteV2))
+  }
+  function notesSelectSubject(subject,topic){
+    selectedSubject=subject; if(topic!==undefined)selectedTopic=subject+'|'+topic;
+    const d=notesData(),arr=d[subject]||[];
+    $n('notesCurrentSubject').textContent=subject;
+    $n('notesCurrentStatus').textContent=arr.length?`${arr.length} saved note${arr.length===1?'':'s'} under this subject.`:'No saved notes yet. Add your first note below.';
+    $n('notesLastSaved').textContent=arr.length?`${arr.length} saved note${arr.length===1?'':'s'}`:'Not saved yet';
+    $n('notesSelectedTopic').textContent=selectedTopic.startsWith(subject+'|')?selectedTopic.slice(subject.length+1):'No topic selected';
+    renderSubjects();
+  }
+  function saveCurrent(){
+    const html=$n('notesHtmlInput').value.trim();if(!html){$n('notesCurrentStatus').textContent='Add some HTML before saving.';return}
+    const d=notesData();const title=$n('notesTitleInput').value.trim()||((selectedTopic.split('|')[1]||selectedSubject)+' Notes');
+    const note={id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html,topic:selectedTopic.startsWith(selectedSubject+'|')?selectedTopic.slice(selectedSubject.length+1):'',updatedAt:new Date().toISOString()};
+    d[selectedSubject]=[note,...(d[selectedSubject]||[])];saveJSON(V2_KEY,d);selectedNoteId=note.id;$n('notesTitleInput').value='';$n('notesHtmlInput').value='';$n('notesCurrentStatus')=`Saved “${title}” under ${selectedSubject}.`;renderSubjects();renderLotteryPool();
+  }
+  function editNoteV2(id){const d=notesData();let found=null;for(const s of SUBJECTS){const n=(d[s.name]||[]).find(x=>x.id===id);if(n){found={...n,subject:s.name};break}}if(!found)return;selectedSubject=found.subject;selectedTopic=found.topic?found.subject+'|'+found.topic:'';$n('notesCurrentSubject').textContent=found.subject;$n('notesSelectedTopic').textContent=found.topic||'No topic selected';$n('notesTitleInput').value=found.title||'';$n('notesHtmlInput').value=found.html||'';$n('notesCurrentStatus')='Editing saved note. Saving creates a new note version.';renderSubjects();window.scrollTo({top:0,behavior:'smooth'});$n('notesTitleInput').focus()}
+  function deleteNoteV2(id){const d=notesData();let subject=null,note=null;for(const s of SUBJECTS){const a=d[s.name]||[];const x=a.find(n=>n.id===id);if(x){subject=s.name;note=x;break}}if(!subject)return;if(!confirm(`Delete “${note?.title||'this note'}”?`))return;d[subject]=(d[subject]||[]).filter(n=>n.id!==id);saveJSON(V2_KEY,d);if(selectedNoteId===id){selectedNoteId='';}$n('notesCurrentStatus').textContent='Note deleted.';renderSubjects();renderLotteryPool()}
+  function openReaderV2(id){const d=notesData();let found=null;for(const s of SUBJECTS){const n=(d[s.name]||[]).find(x=>x.id===id);if(n){found={...n,subject:s.name};break}}if(!found)return;selectedNoteId=found.id;window._currentOpenNoteId=found.id;window._currentOpenNoteSubject=found.subject;['start','progressScreen','revisionScreen','planScreen','studyHubScreen','quickQuizScreen','notesScreen','exam','confirm','result'].forEach(x=>$n(x)?.classList.add('hidden'));$n('noteReaderTitle').textContent=found.title||'Untitled Note';$n('noteReaderSubject').textContent=found.subject+ (found.topic?' · '+found.topic:'');if(typeof window.mountNoteFrame==='function')window.mountNoteFrame($n('noteReaderContent'),found.html||'');else $n('noteReaderContent').innerHTML=typeof notesSafePreview==='function'?notesSafePreview(found.html||''):found.html||'';$n('noteReaderScreen').classList.remove('hidden');window.scrollTo(0,0)}
+  function renderLotteryPool(){const sel=$n('notesLotterySubject');const filter=sel?.value||'__all__';const pool=notePool(filter);$n('notesLotteryPool').textContent=`${pool.length} saved note${pool.length===1?'':'s'} available`;if(!pool.length){$n('notesLotteryTitle').textContent='No saved notes in this pool';$n('notesLotterySubjectLabel').textContent='Save at least one note to use Focus Lottery.';$n('notesLotteryOpenBtn').disabled=true;selectedNoteId='';return}if(selectedNoteId){const found=pool.find(n=>n.id===selectedNoteId);if(found){$n('notesLotteryTitle').textContent=found.title||'Untitled Note';$n('notesLotterySubjectLabel').textContent=found.subject+(found.topic?' · '+found.topic:'');$n('notesLotteryOpenBtn').disabled=false;return}}$n('notesLotteryOpenBtn').disabled=true}
+  function drawLottery(){const filter=$n('notesLotterySubject')?.value||'__all__';const pool=notePool(filter);if(!pool.length){renderLotteryPool();return}const pick=pool[Math.floor(Math.random()*pool.length)];selectedNoteId=pick.id;$n('notesLotteryTitle').textContent=pick.title||'Untitled Note';$n('notesLotterySubjectLabel').textContent=pick.subject+(pick.topic?' · '+pick.topic:'');$n('notesLotteryOpenBtn').disabled=false;resetTimer();startTimer()}
+  function formatTime(sec){return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0')}
+  function updateTimerUI(){const left=Math.max(0,timerSeconds);$n('notesFocusTimer').textContent=formatTime(left);$n('notesFocusProgress').style.width=((900-left)/900*100)+'%';$n('notesFocusPauseBtn').disabled=!timerRunning}
+  function persistTimer(){saveJSON(TIMER_KEY,{seconds:timerSeconds,running:false})}
+  function notesFocusMeta(){const d=notesData();for(const s of SUBJECTS){const n=(d[s.name]||[]).find(x=>x.id===selectedNoteId);if(n)return{cat:s.name,topic:n.topic||n.title||'Focus study'};}return{cat:selectedSubject||'Notes',topic:selectedTopic||'Focus study'}}
+  function logNotesFocusSegment(){if(!notesFocusSegmentStartedAt)return;const secs=Math.floor((Date.now()-notesFocusSegmentStartedAt)/1000);notesFocusSegmentStartedAt=0;if(secs>=10&&typeof window.kaushalLogStudyTime==='function'){const meta=notesFocusMeta();window.kaushalLogStudyTime(secs,{cat:meta.cat,topic:meta.topic,src:'notes-focus'})}}
+  function stopTimer(logStudy=true){if(logStudy)logNotesFocusSegment();if(timerHandle){clearInterval(timerHandle);timerHandle=null}timerRunning=false;updateTimerUI();persistTimer();if(typeof progressRenderDashboard==='function'&&!$n('progressScreen')?.classList.contains('hidden'))progressRenderDashboard()}
+  function startTimer(){if(!selectedNoteId){return}if(timerSeconds<=0)timerSeconds=900;if(timerRunning)return;timerRunning=true;notesFocusSegmentStartedAt=Date.now();updateTimerUI();clearInterval(timerHandle);timerHandle=setInterval(()=>{timerSeconds--;updateTimerUI();if(timerSeconds<=0){logNotesFocusSegment();stopTimer(false);$n('notesFocusTimer').textContent='00:00';$n('notesLotteryTitle').textContent='Focus session complete';$n('notesLotterySubjectLabel').textContent='Great. Draw another note when you are ready.'}},1000)}
+  function pauseTimer(){stopTimer(true)}
+  function resetTimer(){stopTimer(true);timerSeconds=900;updateTimerUI();persistTimer()}
+  function clearTopic(){selectedTopic='';localStorage.removeItem(TOPIC_KEY);$n('notesSelectedTopic').textContent='No topic selected';renderSubjects()}
+  function openNotesV2(){
+    if(typeof setActiveView==='function')setActiveView('notes');
+    ['start','progressScreen','revisionScreen','planScreen','studyHubScreen','quickQuizScreen','noteReaderScreen','exam','confirm','result'].forEach(x=>$n(x)?.classList.add('hidden'));
+    $n('notesScreen').classList.remove('hidden');renderLotteryFilter();renderSubjects();notesSelectSubject(selectedSubject);renderLotteryPool();updateTimerUI();window.scrollTo(0,0);
+  }
+  function closeNotesV2(){if(timerRunning)stopTimer();if(typeof setActiveView==='function')setActiveView('home');$n('notesScreen').classList.add('hidden');$n('noteReaderScreen')?.classList.add('hidden');$n('start').classList.remove('hidden');window.scrollTo(0,0)}
+
+  /* Expose selected-note reader/edit behaviour to the existing reader controls. */
+  window.notesOpenReader=openReaderV2;
+  window.notesEditOpenNote=function(){if(window._currentOpenNoteId)editNoteV2(window._currentOpenNoteId)};
+  window.notesCloseReader=function(){ $n('noteReaderScreen')?.classList.add('hidden'); openNotesV2(); };
+  window.notesV2Open=openNotesV2;
+
+  const home=$n('notesHomeBtn');if(home){home.onclick=e=>{e.preventDefault();e.stopPropagation();openNotesV2()}}
+  const back=$n('notesBackBtn');if(back)back.onclick=e=>{e.preventDefault();e.stopPropagation();closeNotesV2()}
+  const save=$n('notesSaveBtn');if(save)save.onclick=e=>{e.preventDefault();saveCurrent()}
+  const preview=$n('notesPreviewBtn');if(preview)preview.onclick=e=>{e.preventDefault();if(typeof window.notesPreview==='function')window.notesPreview()}
+  const closePrev=$n('notesClosePreviewBtn');if(closePrev)closePrev.onclick=()=>{$n('notesPreviewPane')?.classList.add('hidden')}
+  const lottery=$n('notesLotteryBtn');if(lottery)lottery.onclick=drawLottery
+  const lotOpen=$n('notesLotteryOpenBtn');if(lotOpen)lotOpen.onclick=()=>{if(selectedNoteId)openReaderV2(selectedNoteId)}
+  const lotSel=$n('notesLotterySubject');if(lotSel)lotSel.onchange=()=>{selectedNoteId='';renderLotteryPool()}
+  const fs=$n('notesFocusStartBtn');if(fs)fs.onclick=startTimer
+  const fp=$n('notesFocusPauseBtn');if(fp)fp.onclick=pauseTimer
+  const fr=$n('notesFocusResetBtn');if(fr)fr.onclick=resetTimer
+  const ct=$n('notesClearTopicBtn');if(ct)ct.onclick=clearTopic
+  const rb=$n('noteReaderBackBtn');if(rb)rb.onclick=e=>{e.preventDefault();e.stopPropagation();window.notesCloseReader()}
+  const re=$n('noteReaderEditBtn');if(re)re.onclick=e=>{e.preventDefault();e.stopPropagation();window.notesEditOpenNote()}
+
+  /* Reuse the existing HTML-note preview renderer when available. */
+  try{renderLotteryFilter();renderSubjects();notesSelectSubject(selectedSubject);renderLotteryPool();updateTimerUI()}catch(e){console.warn('Notes V2 init:',e)}
+})();
+</script>
 </body>
 </html>
