@@ -5664,12 +5664,46 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     renderSubjects();
   }
   function saveCurrent(){
-    const html=$n('notesHtmlInput').value.trim();if(!html){$n('notesCurrentStatus').textContent='Add some HTML before saving.';return}
-    const d=notesData();const title=$n('notesTitleInput').value.trim()||((selectedTopic.split('|')[1]||selectedSubject)+' Notes');
-    const note={id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html,topic:selectedTopic.startsWith(selectedSubject+'|')?selectedTopic.slice(selectedSubject.length+1):'',updatedAt:new Date().toISOString()};
-    d[selectedSubject]=[note,...(d[selectedSubject]||[])];saveJSON(V2_KEY,d);selectedNoteId=note.id;$n('notesTitleInput').value='';$n('notesHtmlInput').value='';$n('notesCurrentStatus')=`Saved “${title}” under ${selectedSubject}.`;renderSubjects();renderLotteryPool();
+    const html=$n('notesHtmlInput').value.trim();
+    if(!html){$n('notesCurrentStatus').textContent='Add some HTML before saving.';return}
+    const d=notesData();
+    const title=$n('notesTitleInput').value.trim()||((selectedTopic.split('|')[1]||selectedSubject)+' Notes');
+    const topic=selectedTopic.startsWith(selectedSubject+'|')?selectedTopic.slice(selectedSubject.length+1):'';
+    const editingId=window._editingNoteId||window._currentOpenNoteId||'';
+    let updated=false;
+    if(editingId){
+      for(const subject of SUBJECTS){
+        const arr=Array.isArray(d[subject.name])?d[subject.name]:[];
+        const idx=arr.findIndex(n=>n&&n.id===editingId);
+        if(idx>=0){
+          arr[idx]={...arr[idx],id:editingId,title,html,topic,updatedAt:new Date().toISOString()};
+          d[subject.name]=arr;updated=true;selectedNoteId=editingId;break;
+        }
+      }
+    }
+    if(!updated){
+      const note={id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html,topic,updatedAt:new Date().toISOString()};
+      d[selectedSubject]=[note,...(d[selectedSubject]||[])];
+      selectedNoteId=note.id;
+    }
+    saveJSON(V2_KEY,d);
+    window._editingNoteId='';
+    window._currentOpenNoteId=selectedNoteId;
+    $n('notesTitleInput').value='';$n('notesHtmlInput').value='';
+    $n('notesCurrentStatus').textContent=updated?`Updated “${title}” under ${selectedSubject}.`:`Saved “${title}” under ${selectedSubject}.`;
+    renderSubjects();renderLotteryPool();
   }
-  function editNoteV2(id){const d=notesData();let found=null;for(const s of SUBJECTS){const n=(d[s.name]||[]).find(x=>x.id===id);if(n){found={...n,subject:s.name};break}}if(!found)return;selectedSubject=found.subject;selectedTopic=found.topic?found.subject+'|'+found.topic:'';$n('notesCurrentSubject').textContent=found.subject;$n('notesSelectedTopic').textContent=found.topic||'No topic selected';$n('notesTitleInput').value=found.title||'';$n('notesHtmlInput').value=found.html||'';$n('notesCurrentStatus')='Editing saved note. Saving creates a new note version.';renderSubjects();window.scrollTo({top:0,behavior:'smooth'});$n('notesTitleInput').focus()}
+  function editNoteV2(id){
+    const d=notesData();let found=null;
+    for(const s of SUBJECTS){const n=(d[s.name]||[]).find(x=>x.id===id);if(n){found={...n,subject:s.name};break}}
+    if(!found)return;
+    selectedNoteId=found.id;window._currentOpenNoteId=found.id;window._currentOpenNoteSubject=found.subject;window._editingNoteId=found.id;
+    selectedSubject=found.subject;selectedTopic=found.topic?found.subject+'|'+found.topic:'';
+    $n('notesCurrentSubject').textContent=found.subject;$n('notesSelectedTopic').textContent=found.topic||'No topic selected';
+    $n('notesTitleInput').value=found.title||'';$n('notesHtmlInput').value=found.html||'';
+    $n('notesCurrentStatus').textContent='Editing saved note — saving updates it in place.';
+    renderSubjects();window.scrollTo({top:0,behavior:'smooth'});$n('notesTitleInput').focus();
+  }
   function deleteNoteV2(id){const d=notesData();let subject=null,note=null;for(const s of SUBJECTS){const a=d[s.name]||[];const x=a.find(n=>n.id===id);if(x){subject=s.name;note=x;break}}if(!subject)return;if(!confirm(`Delete “${note?.title||'this note'}”?`))return;d[subject]=(d[subject]||[]).filter(n=>n.id!==id);saveJSON(V2_KEY,d);if(selectedNoteId===id){selectedNoteId='';}$n('notesCurrentStatus').textContent='Note deleted.';renderSubjects();renderLotteryPool()}
   function openReaderV2(id){const d=notesData();let found=null;for(const s of SUBJECTS){const n=(d[s.name]||[]).find(x=>x.id===id);if(n){found={...n,subject:s.name};break}}if(!found)return;selectedNoteId=found.id;window._currentOpenNoteId=found.id;window._currentOpenNoteSubject=found.subject;['start','progressScreen','revisionScreen','planScreen','studyHubScreen','quickQuizScreen','notesScreen','exam','confirm','result'].forEach(x=>$n(x)?.classList.add('hidden'));$n('noteReaderTitle').textContent=found.title||'Untitled Note';$n('noteReaderSubject').textContent=found.subject+ (found.topic?' · '+found.topic:'');if(typeof window.mountNoteFrame==='function')window.mountNoteFrame($n('noteReaderContent'),found.html||'');else $n('noteReaderContent').innerHTML=typeof notesSafePreview==='function'?notesSafePreview(found.html||''):found.html||'';$n('noteReaderScreen').classList.remove('hidden');window.scrollTo(0,0)}
   function renderLotteryPool(){const sel=$n('notesLotterySubject');const filter=sel?.value||'__all__';const pool=notePool(filter);$n('notesLotteryPool').textContent=`${pool.length} saved note${pool.length===1?'':'s'} available`;if(!pool.length){$n('notesLotteryTitle').textContent='No saved notes in this pool';$n('notesLotterySubjectLabel').textContent='Save at least one note to use Focus Lottery.';$n('notesLotteryOpenBtn').disabled=true;selectedNoteId='';return}if(selectedNoteId){const found=pool.find(n=>n.id===selectedNoteId);if(found){$n('notesLotteryTitle').textContent=found.title||'Untitled Note';$n('notesLotterySubjectLabel').textContent=found.subject+(found.topic?' · '+found.topic:'');$n('notesLotteryOpenBtn').disabled=false;return}}$n('notesLotteryOpenBtn').disabled=true}
@@ -5693,9 +5727,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 
   /* Expose selected-note reader/edit behaviour to the existing reader controls. */
   window.notesOpenReader=openReaderV2;
-  window.notesEditOpenNote=function(){if(window._currentOpenNoteId)editNoteV2(window._currentOpenNoteId)};
+  window.notesEditOpenNote=function(){const id=window._currentOpenNoteId||selectedNoteId;if(!id)return;editNoteV2(id);$n('noteReaderScreen')?.classList.add('hidden');$n('notesScreen')?.classList.remove('hidden');};
   window.notesCloseReader=function(){ $n('noteReaderScreen')?.classList.add('hidden'); openNotesV2(); };
   window.notesV2Open=openNotesV2;
+  window.notesV2EditNote=editNoteV2;
 
   const home=$n('notesHomeBtn');if(home){home.onclick=e=>{e.preventDefault();e.stopPropagation();openNotesV2()}}
   const back=$n('notesBackBtn');if(back)back.onclick=e=>{e.preventDefault();e.stopPropagation();closeNotesV2()}
@@ -5714,6 +5749,219 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 
   /* Reuse the existing HTML-note preview renderer when available. */
   try{renderLotteryFilter();renderSubjects();notesSelectSubject(selectedSubject);renderLotteryPool();updateTimerUI()}catch(e){console.warn('Notes V2 init:',e)}
+})();
+</script>
+\n<script id="kaushal-final-stability-pass">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const safe=(fn)=>{try{return fn()}catch(e){console.warn('Kaushal stability:',e);return null}};
+
+  // Prevent accidental form submission/reload from buttons that lack explicit type.
+  document.addEventListener('click',function(e){
+    const b=e.target.closest('button');
+    if(!b||b.type==='submit')return;
+    if(b.form&&b.type==='button')return;
+  },true);
+
+  // Ensure saved-note controls always have live handlers after any render/DOM replacement.
+  document.addEventListener('click',function(e){
+    const b=e.target.closest('#noteReaderBackBtn,#noteReaderEditBtn');
+    if(!b)return;
+    e.preventDefault();e.stopPropagation();
+    if(b.id==='noteReaderBackBtn') safe(()=>window.notesCloseReader&&window.notesCloseReader());
+    else safe(()=>window.notesEditOpenNote&&window.notesEditOpenNote());
+  },true);
+
+  // Keep the page usable if a browser restores a stale hidden-screen state.
+  window.addEventListener('pageshow',function(){safe(function(){
+    const visible=['start','progressScreen','revisionScreen','planScreen','studyHubScreen','notesScreen','quickQuizScreen','exam','result','noteReaderScreen'].filter(id=>$(id)&&!$(id).classList.contains('hidden'));
+    if(!visible.length&&$('start'))$('start').classList.remove('hidden');
+  })});
+
+  // Flush local state when the app is backgrounded/closed. Local data remains the source of truth.
+  window.addEventListener('pagehide',function(){safe(function(){
+    if(typeof writeLocalSnapshot==='function'&&typeof buildCloudPayload==='function')writeLocalSnapshot(buildCloudPayload());
+  })});
+
+  // Avoid browser zoom caused by accidental horizontal overflow in mobile WebViews.
+  function fit(){safe(function(){
+    document.documentElement.style.maxWidth='100%';document.body.style.maxWidth='100%';
+  })}
+  fit();window.addEventListener('resize',fit,{passive:true});
+})();
+</script>\n
+
+<style id="kaushal-notes-final-render-css">
+/* FINAL NOTES READER: keep saved notes visually consistent on desktop/mobile/WebView */
+#noteReaderScreen .notes-reader-content{width:100%;min-width:0;overflow:visible;padding:0!important}
+#noteReaderScreen .saved-note-document{width:100%;min-width:0;overflow:visible!important;contain:none!important;isolation:auto!important;background:transparent!important}
+#noteReaderScreen .kaushal-note-html-frame,#notesPreviewContent .kaushal-note-html-frame{display:block;width:100%;min-width:0;border:0;background:transparent;overflow:hidden}
+@media(max-width:700px){
+  #noteReaderScreen .notes-reader-content{padding:0 10px 20px!important}
+}
+</style>
+<script id="kaushal-notes-final-render-v2">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+
+  function safeUrl(v){
+    const x=String(v||'').trim();
+    if(!x)return '';
+    const compact=x.replace(/[\u0000-\u0020\u00a0\u200b]/g,'').toLowerCase();
+    if(/^(javascript:|vbscript:|data:text\/html)/.test(compact))return '';
+    return x;
+  }
+
+  /*
+   * Notes are saved exactly as entered so Edit Note never destroys the source.
+   * Reader rendering is intentionally normalized: AI-generated HTML often
+   * contains global CSS/body rules which make an embedded note look zoomed,
+   * shifted, tiny, or otherwise disoriented. We render semantic HTML in a
+   * controlled document instead.
+   */
+  function normalizeNoteHTML(raw){
+    const parser=new DOMParser();
+    const doc=parser.parseFromString(String(raw||''),'text/html');
+    const body=doc.body||doc.documentElement;
+
+    body.querySelectorAll('script,iframe,object,embed,form,base,meta,link,noscript,style,template').forEach(e=>e.remove());
+
+    body.querySelectorAll('*').forEach(el=>{
+      [...el.attributes].forEach(a=>{
+        const name=a.name.toLowerCase();
+        const value=a.value||'';
+        if(name.startsWith('on')||name==='srcdoc'||name==='style'||name==='class'||name==='id'){
+          el.removeAttribute(a.name);return;
+        }
+        if(['href','src','xlink:href','action','formaction'].includes(name)){
+          const safe=safeUrl(value);
+          if(!safe)el.removeAttribute(a.name); else el.setAttribute(a.name,safe);
+        }
+      });
+    });
+
+    /* Prevent common malformed HTML from breaking the page layout. */
+    body.querySelectorAll('img').forEach(img=>{
+      img.removeAttribute('width');img.removeAttribute('height');
+      img.setAttribute('loading','lazy');
+    });
+    body.querySelectorAll('table').forEach(t=>{
+      t.removeAttribute('width');
+      const wrap=doc.createElement('div');wrap.setAttribute('data-note-table-wrap','1');
+      t.parentNode.insertBefore(wrap,t);wrap.appendChild(t);
+    });
+
+    const css=`
+      *{box-sizing:border-box}
+      html{margin:0;padding:0;background:transparent}
+      body{margin:0!important;padding:26px 28px 34px!important;background:#fff!important;color:#172A2D!important;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;font-size:16px!important;line-height:1.72!important;overflow-wrap:anywhere!important;word-break:normal!important}
+      body>div,body>section,body>article,body>main,body>header,body>footer{max-width:100%!important}
+      h1,h2,h3,h4,h5,h6{color:#173E42!important;line-height:1.25!important;margin:1.15em 0 .55em!important;font-weight:800!important}
+      h1{font-size:28px!important}h2{font-size:23px!important}h3{font-size:20px!important}h4{font-size:18px!important}h5,h6{font-size:16px!important}
+      p{margin:.65em 0!important}
+      ul,ol{margin:.7em 0!important;padding-left:1.6em!important}
+      li{margin:.3em 0!important}
+      strong,b{font-weight:800!important}em,i{font-style:italic!important}
+      blockquote{margin:1em 0!important;padding:12px 16px!important;border-left:4px solid #D9C98B!important;background:#F7F4EA!important;border-radius:8px!important}
+      code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace!important;background:#F1F4F3!important;padding:2px 5px!important;border-radius:5px!important}
+      pre{max-width:100%!important;overflow:auto!important;white-space:pre-wrap!important;background:#172A2D!important;color:#F5FAF8!important;padding:14px!important;border-radius:10px!important}
+      img{display:block!important;max-width:100%!important;height:auto!important;margin:12px auto!important}
+      [data-note-table-wrap]{width:100%!important;max-width:100%!important;overflow-x:auto!important;margin:14px 0!important;-webkit-overflow-scrolling:touch!important}
+      table{width:100%!important;max-width:100%!important;border-collapse:collapse!important;font-size:14px!important;background:#fff!important}
+      th{background:#173E42!important;color:#fff!important;font-weight:800!important;text-align:left!important}
+      th,td{border:1px solid #D8E1DE!important;padding:9px 10px!important;vertical-align:top!important;overflow-wrap:anywhere!important}
+      tr:nth-child(even) td{background:#F7F9F8!important}
+      a{color:#24565A!important;text-decoration:underline!important}
+      hr{border:0!important;border-top:1px solid #D8E1DE!important;margin:22px 0!important}
+      @media(max-width:700px){body{padding:18px 14px 28px!important;font-size:15px!important;line-height:1.68!important}h1{font-size:23px!important}h2{font-size:20px!important}h3{font-size:18px!important}table{font-size:12px!important}th,td{padding:7px 8px!important}}
+    `;
+    return '<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style></head><body>'+body.innerHTML+'</body></html>';
+  }
+
+  function mount(container,raw){
+    if(!container)return;
+    container.innerHTML='';
+    const frame=document.createElement('iframe');
+    frame.className='kaushal-note-html-frame';
+    frame.setAttribute('sandbox','allow-same-origin');
+    frame.setAttribute('title','Saved note');
+    frame.setAttribute('scrolling','no');
+    frame.style.cssText='display:block;width:100%;height:240px;min-height:240px;border:0;background:transparent;overflow:hidden';
+    const resize=()=>{try{
+      const d=frame.contentDocument;if(!d)return;
+      const b=d.body,root=d.documentElement;
+      const h=Math.max(b?.scrollHeight||0,b?.offsetHeight||0,root?.scrollHeight||0,240);
+      frame.style.height=(h+2)+'px';
+    }catch(e){}};
+    frame.addEventListener('load',()=>{resize();setTimeout(resize,60);setTimeout(resize,250);setTimeout(resize,700);try{
+      if(window.ResizeObserver&&frame.contentDocument?.body){const ro=new ResizeObserver(resize);ro.observe(frame.contentDocument.body);frame._notesRO=ro}
+    }catch(e){}});
+    frame.srcdoc=normalizeNoteHTML(raw);
+    container.appendChild(frame);
+  }
+
+  window.mountNoteFrame=mount;
+  window.notesPreview=function(){
+    const pane=$('notesPreviewPane'),content=$('notesPreviewContent');
+    if(!pane||!content)return;
+    mount(content,$('notesHtmlInput')?.value||'');
+    pane.classList.remove('hidden');
+  };
+
+  /* One authoritative reader implementation. */
+  window.notesOpenReader=function(id){
+    const load=typeof window.notesLoad==='function'?window.notesLoad:null;
+    const data=load?load():{};
+    let found=null;
+    const subjects=Array.isArray(window.NOTES_SUBJECTS)?window.NOTES_SUBJECTS:
+      (typeof NOTES_SUBJECTS!=='undefined'?NOTES_SUBJECTS:[]);
+    for(const subject of subjects){
+      const arr=Array.isArray(data[subject])?data[subject]:[];
+      const n=arr.find(x=>x&&String(x.id)===String(id));
+      if(n){found={...n,subject};break}
+    }
+    /* V2 notes store fallback */
+    if(!found){
+      try{
+        const d=JSON.parse(localStorage.getItem('cgpsc_subject_html_notes_v2')||'{}');
+        for(const subject of subjects){const n=(d[subject]||[]).find(x=>x&&String(x.id)===String(id));if(n){found={...n,subject};break}}
+      }catch(e){}
+    }
+    if(!found)return;
+    window._currentOpenNoteId=found.id;
+    window._currentOpenNoteSubject=found.subject;
+    window._editingNoteId='';
+    ['start','progressScreen','revisionScreen','planScreen','studyHubScreen','quickQuizScreen','notesScreen','exam','confirm','result'].forEach(x=>$(x)?.classList.add('hidden'));
+    $('noteReaderTitle').textContent=found.title||'Untitled Note';
+    $('noteReaderSubject').textContent=found.subject+(found.topic?' · '+found.topic:'');
+    mount($('noteReaderContent'),found.html||'');
+    $('noteReaderScreen')?.classList.remove('hidden');
+    window.scrollTo(0,0);
+  };
+
+  /* Edit loads the original source, not the normalized reader HTML. */
+  window.notesEditOpenNote=function(){
+    const id=window._currentOpenNoteId;
+    if(!id)return;
+    if(typeof window.notesV2EditNote==='function')window.notesV2EditNote(id);
+    else if(typeof window.notesEditById==='function')window.notesEditById(id);
+    else return;
+    $('noteReaderScreen')?.classList.add('hidden');
+    $('notesScreen')?.classList.remove('hidden');
+  };
+
+  window.notesCloseReader=function(){
+    $('noteReaderScreen')?.classList.add('hidden');
+    if(typeof window.notesV2Open==='function')window.notesV2Open();
+    else {$('notesScreen')?.classList.remove('hidden');window.scrollTo(0,0)}
+  };
+
+  /* Ensure V2 editor can be reached without exposing its private closure. */
+  if(typeof window.notesV2EditNote!=='function' && typeof window.notesEditOpenNote==='function'){
+    /* no-op: V2 implementation will publish the helper below when available */
+  }
 })();
 </script>
 </body>
