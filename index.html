@@ -6657,5 +6657,202 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   try{const cur=localStorage.getItem(KEY);if(cur)put(cur)}catch(e){}
 })();
 </script>
+<style id="kaushal-figure-support">
+.q-figure{margin:14px 0 6px;padding:12px;background:#fff;border:1px solid var(--border,#ddd7b9);border-radius:14px;text-align:center}
+.q-figure svg,.q-figure img{max-width:min(100%,480px);height:auto;max-height:340px;display:block;margin:0 auto}
+.q-figure .fig-alt{font-size:12px;color:var(--muted,#68797b);margin-top:8px;font-style:italic}
+.q-figure.fig-missing{background:var(--soft,#f7f8f7);border-style:dashed;color:var(--muted,#68797b);font-size:14px;padding:18px}
+.q-figure.fig-missing b{display:block;margin-bottom:4px;color:var(--primary,#274245)}
+.q-figure.solution-fig{margin:10px 0}
+.q-figure .fig-label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#68797b);margin-bottom:6px}
+.options.img-opts{grid-template-columns:repeat(2,minmax(0,1fr))}
+.option .opt-fig,.eh-opt .opt-fig,.revision-options .opt-fig{display:inline-block;background:#fff;border-radius:8px;padding:4px}
+.opt-fig svg{width:100%;max-width:150px;height:auto;max-height:130px;display:block}
+.revision-options>div .opt-fig svg{max-width:90px;max-height:80px}
+</style>
+<script id="kaushal-figure-support-js">
+(function(){
+'use strict';
+/* ---------- SVG sanitising ---------- */
+function cleanSVG(raw){
+  raw=String(raw||'').trim();
+  if(!/<svg[\s>]/i.test(raw))return '';
+  let doc;try{doc=new DOMParser().parseFromString(raw,'text/html')}catch(e){return ''}
+  const svg=doc.querySelector('svg');if(!svg)return '';
+  svg.querySelectorAll('script,foreignObject,iframe,object,embed,style,animate,set,animateTransform').forEach(n=>n.remove());
+  [svg,...svg.querySelectorAll('*')].forEach(el=>[...el.attributes].forEach(a=>{
+    const v=a.value.replace(/[\u0000-\u0020\u00a0]/g,'').toLowerCase();
+    if(/^on/i.test(a.name)||/^(javascript|vbscript|data:text)/.test(v))el.removeAttribute(a.name);
+  }));
+  if(!svg.getAttribute('viewBox')){
+    const w=parseFloat(svg.getAttribute('width')),h=parseFloat(svg.getAttribute('height'));
+    svg.setAttribute('viewBox','0 0 '+(w||200)+' '+(h||200));
+  }
+  svg.removeAttribute('width');svg.removeAttribute('height');
+  svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  return svg.outerHTML;
+}
+function isSvgText(v){return typeof v==='string'&&/^\s*<svg[\s>]/i.test(v)}
+function isImgSrc(v){return typeof v==='string'&&/^data:image\/(png|jpe?g|gif|webp|svg\+xml);/i.test(v.trim())}
+window.kaushalCleanSVG=cleanSVG;
+
+/* ---------- figure element ---------- */
+function figureEl(fig,label,extra){
+  if(!fig||typeof fig!=='object')return null;
+  const alt=String(fig.alt||'').trim();
+  const d=document.createElement('div');
+  d.className='q-figure'+(extra?' '+extra:'');
+  d.setAttribute('role','img');
+  if(alt)d.setAttribute('aria-label',alt);
+  let ok=false;
+  if(label){const l=document.createElement('div');l.className='fig-label';l.textContent=label;d.appendChild(l)}
+  const svg=cleanSVG(fig.svg);
+  if(svg){const w=document.createElement('div');w.innerHTML=svg;d.appendChild(w.firstChild);ok=true}
+  else if(isImgSrc(fig.src||fig.image)){const im=document.createElement('img');im.src=(fig.src||fig.image).trim();im.alt=alt;d.appendChild(im);ok=true}
+  if(ok){
+    if(alt){const c=document.createElement('div');c.className='fig-alt';c.textContent=alt;c.hidden=true;d.appendChild(c)}
+    return d;
+  }
+  if(!alt)return null;
+  /* No drawable figure: show the text description so the question is still usable */
+  d.classList.add('fig-missing');
+  d.innerHTML='<b>📐 Figure (description)</b>';
+  const t=document.createElement('span');t.textContent=alt;d.appendChild(t);
+  return d;
+}
+window.kaushalFigureEl=figureEl;
+
+/* ---------- question renderers: append the figure ---------- */
+['renderMCQ','renderStatements','renderAR','renderMatch'].forEach(name=>{
+  const orig=window[name];if(typeof orig!=='function')return;
+  window[name]=function(box,q){
+    const r=orig.apply(this,arguments);
+    try{
+      if(q&&q.question_figure&&!box.querySelector(':scope > .q-figure')){
+        const f=figureEl(q.question_figure);
+        if(f){
+          /* place figure right after the question text/intro, before ending line if any */
+          const ending=box.querySelector(':scope > .question-ending');
+          ending?box.insertBefore(f,ending):box.appendChild(f);
+        }
+      }
+    }catch(e){console.warn('figure render failed',e)}
+    return r;
+  };
+});
+
+/* ---------- options: SVG / image options ---------- */
+function upgradeOptionSpan(span){
+  if(!span||span.dataset.figDone)return;
+  const t=span.textContent;
+  if(isSvgText(t)){
+    const s=cleanSVG(t);span.dataset.figDone='1';
+    if(s){span.innerHTML='<span class="opt-fig">'+s+'</span>';return true}
+  }else if(isImgSrc(t)){
+    span.dataset.figDone='1';
+    const im=document.createElement('img');im.src=t.trim();im.style.maxWidth='150px';im.alt='Option';
+    span.textContent='';const w=document.createElement('span');w.className='opt-fig';w.appendChild(im);span.appendChild(w);return true;
+  }
+}
+function upgradeOptions(){
+  const c=document.getElementById('options');if(!c)return;
+  let any=false;
+  c.querySelectorAll('.option').forEach(l=>{const sp=l.querySelector('.option-key')?.nextElementSibling;if(upgradeOptionSpan(sp))any=true});
+  c.classList.toggle('img-opts',any||!!c.querySelector('.opt-fig'));
+}
+if(typeof window.renderOptions==='function'){
+  const orig=window.renderOptions;
+  window.renderOptions=function(q){const r=orig.apply(this,arguments);try{upgradeOptions()}catch(e){}return r};
+}
+/* Exam Hall builds its own option buttons inside a private closure: watch the DOM */
+function watch(id,fn){
+  const el=document.getElementById(id);if(!el)return;
+  new MutationObserver(()=>{try{fn(el)}catch(e){}}).observe(el,{childList:true});
+}
+watch('ehOpts',el=>el.querySelectorAll('.eh-opt').forEach(b=>{
+  const sp=b.querySelector('span');
+  if(sp&&upgradeOptionSpan(sp))el.style.display='grid',el.style.gridTemplateColumns='repeat(2,minmax(0,1fr))'
+}));
+
+/* ---------- plain text (copy / revision key): don't dump raw SVG ---------- */
+if(typeof window.questionPlainText==='function'){
+  const orig=window.questionPlainText;
+  window.questionPlainText=function(q,i){
+    let t=orig.apply(this,arguments);
+    t=t.replace(/<svg[\s\S]*?<\/svg>/gi,'[Diagram]').replace(/data:image\/[a-z+]+;base64,[A-Za-z0-9+\/=]+/gi,'[Diagram]');
+    return t;
+  };
+}
+
+/* ---------- results: question figure + solution figure ---------- */
+if(typeof window.buildSolutions==='function'){
+  const orig=window.buildSolutions;
+  window.buildSolutions=function(){
+    const r=orig.apply(this,arguments);
+    try{
+      (App.questions||[]).forEach(q=>{
+        const card=document.getElementById('solution-'+q.id);if(!card)return;
+        if(q.question_figure){
+          const qt=card.querySelector('.result-question-text');
+          const f=figureEl(q.question_figure);if(f&&qt&&!card.querySelector('.q-figure:not(.solution-fig)'))qt.after(f);
+        }
+        if(q.solution_figure){
+          const ex=card.querySelector('.result-explanation');
+          const f=figureEl(q.solution_figure,'Solution diagram','solution-fig');
+          if(f&&ex&&!card.querySelector('.solution-fig'))ex.querySelector('.exam-takeaway')?.before(f)||ex.appendChild(f);
+        }
+        /* image options in the options listing, if the result view prints them */
+        card.querySelectorAll('.result-question-text').forEach(n=>{});
+      });
+    }catch(e){console.warn('solution figures failed',e)}
+    return r;
+  };
+}
+
+/* ---------- revision queue: store + show figures ---------- */
+if(typeof window.revisionRecordQuestion==='function'){
+  const orig=window.revisionRecordQuestion;
+  window.revisionRecordQuestion=function(q,selected){
+    const r=orig.apply(this,arguments);
+    try{
+      if(q&&(q.question_figure||q.solution_figure)){
+        const key=revisionQuestionKey(q),list=revisionLoad(),it=list.find(x=>x.key===key);
+        if(it){it.figure=q.question_figure||null;it.solutionFigure=q.solution_figure||null;revisionSave(list)}
+      }
+    }catch(e){}
+    return r;
+  };
+}
+if(typeof window.revisionRenderScreen==='function'){
+  const orig=window.revisionRenderScreen;
+  window.revisionRenderScreen=function(){
+    const r=orig.apply(this,arguments);
+    try{
+      const list=revisionMerge(App.revision,revisionLoad());
+      document.querySelectorAll('#revisionItems .revision-item').forEach((art,i)=>{
+        const x=list[i];if(!x)return;
+        if(x.figure&&!art.querySelector('.q-figure')){
+          const f=figureEl(x.figure);const qn=art.querySelector('.revision-question');if(f&&qn)qn.after(f);
+        }
+        if(x.solutionFigure&&!art.querySelector('.solution-fig')){
+          const f=figureEl(x.solutionFigure,'Solution diagram','solution-fig');
+          const d=art.querySelector('.revision-explanation');if(f&&d)d.after(f);
+        }
+        art.querySelectorAll('.revision-options > div').forEach(div=>{
+          const txt=div.textContent;const m=txt.match(/^\s*[A-Z]\.\s*(<svg[\s\S]*)$/i);
+          if(m){const s=cleanSVG(m[1]);if(s){const b=div.querySelector('b');div.innerHTML='';if(b)div.appendChild(b);const sp=document.createElement('span');sp.className='opt-fig';sp.innerHTML=s;div.appendChild(sp)}}
+        });
+      });
+    }catch(e){console.warn('revision figures failed',e)}
+    return r;
+  };
+}
+
+/* re-render current question if one is on screen when this patch loads */
+try{if(typeof App!=="undefined"&&App.questions&&App.questions.length&&typeof window.render==='function'&&!document.getElementById('exam')?.classList.contains('hidden'))window.render()}catch(e){}
+})();
+</script>
+
 </body>
 </html>
