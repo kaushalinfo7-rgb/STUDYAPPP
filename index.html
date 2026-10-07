@@ -4829,16 +4829,30 @@ const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.quest
 const sig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(STT_KEY,'')]));
 cloudStatus=function(t){const e=$('cloudSyncText');if(e)e.textContent=t;document.querySelectorAll('.bank-cloud-pill,#notesSyncBadge').forEach(x=>x.textContent='☁ '+t)};
 function mergeObj(l,r,key,pick){const m=new Map();(l||[]).forEach(x=>x&&m.set(x[key],x));(r||[]).forEach(x=>{if(!x)return;const o=m.get(x[key]);m.set(x[key],o?pick(o,x):x)});return[...m.values()]}
+/* Completion records (focus-lottery done date, topic-test score) are written to a note WITHOUT changing updatedAt,
+   so a plain "newest copy wins" merge used to throw them away. Always keep the newest of each record. */
+function noteMarks(base,other){
+ if(!base||!other)return base||other;
+ const out={...base},t=v=>Date.parse(v||'')||0;
+ if(t(other.lotteryDoneAt)>t(base.lotteryDoneAt))out.lotteryDoneAt=other.lotteryDoneAt;
+ if(other.lastQuiz&&(!base.lastQuiz||t(other.lastQuiz.at)>t(base.lastQuiz.at)))out.lastQuiz=other.lastQuiz;
+ const qa=Math.max(+base.quizAttempts||0,+other.quizAttempts||0),qb=Math.max(+base.quizBest||0,+other.quizBest||0);
+ if(qa)out.quizAttempts=qa;if(qb)out.quizBest=qb;
+ const rd=[...new Set([...(Array.isArray(base.readDays)?base.readDays:[]),...(Array.isArray(other.readDays)?other.readDays:[])])].sort();
+ if(rd.length)out.readDays=rd.slice(-120);
+ if(t(other.lastReadAt)>t(base.lastReadAt))out.lastReadAt=other.lastReadAt;
+ return out;
+}
 function union(remote){
  const rb=migBank(remote.questionBanks||{}),lb=bankLoad(),b={};new Set([...Object.keys(lb),...Object.keys(rb)]).forEach(s=>b[s]=mergeObj(lb[s],rb[s],'id',o=>o));storageSet(QUESTION_BANKS_KEY,JSON.stringify(b));
- const ln=notesLoad(),rn=notesNormalize(remote.notes),n={};new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(s=>n[s]=mergeObj(ln[s],rn[s],'id',(a,c)=>Date.parse(c.updatedAt||0)>Date.parse(a.updatedAt||0)?c:a));storageSet(NOTES_KEY,JSON.stringify(n));
+ const ln=notesLoad(),rn=notesNormalize(remote.notes),n={};new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(s=>n[s]=mergeObj(ln[s],rn[s],'id',(a,c)=>{const cn=Date.parse(c.updatedAt||0)>Date.parse(a.updatedAt||0);return noteMarks(cn?c:a,cn?a:c)}));storageSet(NOTES_KEY,JSON.stringify(n));
  const t=getTrackerSnapshot(),rt=remote.tracker?.days||{};Object.entries(rt).forEach(([d,v])=>{if(!t.days[d]||Array.isArray(t.days[d]))t.days[d]=v;else if(v&&!Array.isArray(v))t.days[d]={...v,...t.days[d]}});storageSet(TRACKER_KEY,JSON.stringify(t));
  storageSet(REVISION_KEY,JSON.stringify(revisionMerge(revisionLoad(),remote.revision||[])));
  const lp=planLoad(),rp=remote.plan?.days||{};Object.entries(rp).forEach(([d,items])=>{lp.days[d]=mergeObj(lp.days[d],items,'id',(a,c)=>({...a,done:a.done||c.done}))});storageSet(PLAN_KEY,JSON.stringify(lp));
  storageSet(ATT,JSON.stringify(cleanAtt(mergeObj(J(ATT,[]),remote.attempts,'at',o=>o).sort((a,c)=>Date.parse(c.at)-Date.parse(a.at)))));
  if(remote.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),remote.studyTime)));
 }
-function takeRemote(r){if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes)storageSet(NOTES_KEY,JSON.stringify(notesNormalize(r.notes)));if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(r.tracker));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(r.plan));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)))}
+function takeRemote(r){if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(r.tracker));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(r.plan));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)))}
 function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 applySnapshot=function(){return false};   /* never load another device's exam state */
 async function pull(full){
@@ -6692,50 +6706,53 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
 
   /* ---------- DASHBOARD ---------- */
+  function noteDays(n){const set=new Set(Array.isArray(n.readDays)?n.readDays:[]);const t=Date.parse(n.lotteryDoneAt||'');if(!isNaN(t))set.add(dayKey(new Date(t)));return set}
   function stats(){
     const notes=allNotes(),now=new Date(),today=dayKey(now),days=[];
     for(let i=6;i>=0;i--){const dt=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);days.push({key:dayKey(dt),label:dt.toLocaleDateString(undefined,{weekday:'short'}),count:0,today:i===0})}
     const idx={};days.forEach((d,i)=>idx[d.key]=i);
-    const readToday=[],quizToday=[];let saved=0,pool=0,resting=0;
+    const readToday=[];let saved=0,pool=0,resting=0;
     notes.forEach(n=>{
       if(!String(n.html||'').trim())return;
       saved++;
       const inSyllabus=String(n.topic||'').includes(' › '),t=Date.parse(n.lotteryDoneAt||'');
-      if(!isNaN(t)){
-        const k=dayKey(new Date(t));
-        if(k in idx)days[idx[k]].count++;
-        if(k===today)readToday.push({...n,doneMs:t});
-        if(Date.now()-t<COOL_MS)resting++;else if(inSyllabus)pool++;
-      }else if(inSyllabus)pool++;
-      const qa=n.lastQuiz&&Date.parse(n.lastQuiz.at);
-      if(qa&&dayKey(new Date(qa))===today)quizToday.push(n);
+      const focusToday=!isNaN(t)&&dayKey(new Date(t))===today;
+      noteDays(n).forEach(k=>{if(k in idx)days[idx[k]].count++});
+      if(noteDays(n).has(today)){
+        const rt=Date.parse(n.lastReadAt||''),readMs=(!isNaN(rt)&&dayKey(new Date(rt))===today)?rt:0;
+        readToday.push({...n,doneMs:Math.max(focusToday?t:0,readMs)||Date.now(),viaFocus:focusToday});
+      }
+      if(!isNaN(t)){if(Date.now()-t<COOL_MS)resting++;else if(inSyllabus)pool++}else if(inSyllabus)pool++;
     });
     readToday.sort((a,b)=>b.doneMs-a.doneMs);
     const week=days.reduce((s,d)=>s+d.count,0);
-    const qc=quizToday.reduce((s,n)=>s+(+n.lastQuiz.correct||0),0),qt=quizToday.reduce((s,n)=>s+(+n.lastQuiz.total||0),0);
-    return {days,readToday,quizToday,saved,pool,resting,week,avg:qt?Math.round(qc/qt*100):null};
+    /* tests: every test attempt logged by the app today (topic tests, quick quiz, practice, mocks) */
+    let att=[];try{att=JSON.parse(localStorage.getItem('cgpsc_attempts_v1')||'[]')}catch(e){}
+    const tt=(Array.isArray(att)?att:[]).filter(a=>a&&a.at&&dayKey(new Date(a.at))===today);
+    const sc=tt.reduce((x,a)=>x+(+a.score||0),0),mx=tt.reduce((x,a)=>x+(+a.max||0),0);
+    return {days,readToday,testsToday:tt.length,saved,pool,resting,week,avg:mx?Math.max(0,Math.round(sc/mx*100)):null};
   }
   function dashHTML(){
     const s=stats(),banks=typeof bankLoad==='function'?bankLoad():{},max=Math.max(1,...s.days.map(d=>d.count));
     const today=new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
     const rows=s.readToday.map(n=>{
       const p=parseKey(n.topic),qn=topicQs(n.topic,banks).length;
-      const lq=n.lastQuiz&&Date.parse(n.lastQuiz.at)>=n.doneMs-1000?n.lastQuiz:null;
+      const lq=n.lastQuiz&&dayKey(new Date(n.lastQuiz.at))===dayKey(new Date())?n.lastQuiz:null;
       let right;
       if(lq){const pc=lq.total?Math.round(lq.correct/lq.total*100):0;right=`<span class="ntd-badge ${pc>=70?'good':pc>=40?'mid':'low'}">Test ${esc(lq.correct)}/${esc(lq.total)} · ${pc}%</span><button type="button" class="ntd-test-btn" data-ntd-test="${esc(n.id)}" ${qn?'':'disabled'}>Retake</button>`}
       else if(qn)right=`<button type="button" class="ntd-test-btn" data-ntd-test="${esc(n.id)}">Take ${Math.min(QUIZ_N,qn)}-Q test</button>`;
       else right=`<span class="ntd-badge">No test questions yet</span>`;
-      return `<div class="ntd-row"><div class="ntd-row-main"><strong>${esc(n.title||'Untitled Note')}</strong><small>${esc(n.subject)}${p.group?' · '+esc(p.group):''}${p.topic?' › '+esc(p.topic):''}</small></div><span class="ntd-time">${esc(new Date(n.doneMs).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}))}</span>${right}</div>`;
+      return `<div class="ntd-row"><div class="ntd-row-main"><strong>${esc(n.title||'Untitled Note')}</strong><small>${esc(n.subject)}${p.group?' · '+esc(p.group):''}${p.topic?' › '+esc(p.topic):''}</small></div><span class="ntd-time">${n.viaFocus?'15-min focus · ':'Read · '}${esc(new Date(n.doneMs).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}))}</span>${right}</div>`;
     }).join('');
     return `<div class="ntd-hero">
         <div><span class="ntd-eyebrow">TODAY · ${esc(today)}</span>
           <div class="ntd-big"><b>${s.readToday.length}</b><span>note${s.readToday.length===1?'':'s'} read today</span></div>
-          <p class="ntd-sub">${s.readToday.length?fmtMin(s.readToday.length*FOCUS_MIN)+' of completed 15-minute focus sessions':'Finish a full 15-minute focus session to count a note as read.'}</p></div>
+          <p class="ntd-sub">${s.readToday.length?(()=>{const f=s.readToday.filter(n=>n.viaFocus).length,r=s.readToday.length-f;return [f?f+' via 15-min focus ('+fmtMin(f*FOCUS_MIN)+')':'',r?r+' read from the note viewer':''].filter(Boolean).join(' · ')})():'Open a note for 15 seconds, or finish a 15-minute focus session, to count it as read.'}</p></div>
         <div class="ntd-week"><div class="ntd-week-title">LAST 7 DAYS</div><div class="ntd-bars">${s.days.map(d=>`<div class="ntd-bar ${d.today?'is-today':''}"><em>${d.count}</em><i style="height:${Math.max(4,Math.round(d.count/max*70))}px"></i><small>${esc(d.label)}</small></div>`).join('')}</div></div>
       </div>
       <div class="ntd-cards">
         <div class="ntd-card"><small>This week</small><b>${s.week}</b><span>notes completed</span></div>
-        <div class="ntd-card"><small>Tests today</small><b>${s.quizToday.length}</b><span>${s.avg===null?'no test taken yet':'average score '+s.avg+'%'}</span></div>
+        <div class="ntd-card"><small>Tests today</small><b>${s.testsToday}</b><span>${s.avg===null?'no test taken yet':'average score '+s.avg+'%'}</span></div>
         <div class="ntd-card"><small>In lottery</small><b>${s.pool}</b><span>${s.resting} resting (10 days)</span></div>
         <div class="ntd-card"><small>Saved notes</small><b>${s.saved}</b><span>across all subjects</span></div>
       </div>
@@ -6799,6 +6816,36 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       b.onclick=()=>{res.classList.add('hidden');if(typeof window.notesOpen==='function')window.notesOpen();else{const n=$('notesScreen');n&&n.classList.remove('hidden')}};
       host.insertBefore(b,host.firstChild)}
     new MutationObserver(()=>{if(!res.classList.contains('hidden'))onResultShown();else{$('ntdResultBack')&&$('ntdResultBack').classList.add('hidden');$('ntdResultBanner')&&$('ntdResultBanner').remove()}}).observe(res,{attributes:true,attributeFilter:['class']});
+  }
+
+  /* ---------- count a note as read when the viewer stays open; test button in the viewer ---------- */
+  const READ_SECS=15;let readTimer=null;
+  function markRead(id){
+    const d=loadNotes(),today=dayKey(new Date());let hit=false;
+    Object.keys(d).forEach(s=>{
+      if(!Array.isArray(d[s]))return;const i=d[s].findIndex(n=>n&&n.id===id);if(i<0)return;
+      const n=d[s][i],rd=Array.isArray(n.readDays)?n.readDays.slice():[];
+      if(!rd.includes(today))rd.push(today);
+      d[s][i]={...n,readDays:rd.slice(-120),lastReadAt:new Date().toISOString()};hit=true;
+    });
+    if(hit){saveNotes(d);paintDash()}
+  }
+  function paintReaderTest(id){
+    const host=$('noteReaderSubject')&&$('noteReaderSubject').parentNode;if(!host)return;
+    let b=$('ntdReaderTest');
+    if(!b){b=document.createElement('button');b.type='button';b.id='ntdReaderTest';b.className='ntd-test-btn';b.style.marginTop='8px';b.onclick=()=>{const cid=window._currentOpenNoteId;if(cid)startQuiz(cid)};host.appendChild(b)}
+    const note=allNotes().find(n=>n.id===id),qn=note?topicQs(note.topic).length:0;
+    b.style.display=qn?'':'none';b.textContent='Take '+Math.min(QUIZ_N,qn)+'-question test on this topic';
+  }
+  function watchReader(){
+    const rs=$('noteReaderScreen');if(!rs||rs.dataset.ntd==='1')return;rs.dataset.ntd='1';
+    new MutationObserver(()=>{
+      clearTimeout(readTimer);
+      if(rs.classList.contains('hidden'))return;
+      const id=window._currentOpenNoteId;if(!id)return;
+      try{paintReaderTest(id)}catch(e){}
+      readTimer=setTimeout(()=>{if(!rs.classList.contains('hidden')&&window._currentOpenNoteId===id)markRead(id)},READ_SECS*1000);
+    }).observe(rs,{attributes:true,attributeFilter:['class']});
   }
 
   /* ---------- offer the test inside the "Congratulations" card ---------- */
@@ -6911,7 +6958,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 
   const ns=$('notesScreen');
   if(ns)new MutationObserver(ensure).observe(ns,{childList:true});
-  setupResult();ensure();
+  setupResult();watchReader();ensure();
   /* keep the numbers fresh (sync from another device, midnight roll-over, tab refocus) */
   setInterval(()=>{const s=$('notesScreen');if(s&&!s.classList.contains('hidden'))paintDash()},20000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')paintDash()});
