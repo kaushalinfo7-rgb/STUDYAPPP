@@ -2995,7 +2995,7 @@ body.theme-dark #start .study-nav-actions > button.nav-tile:focus-visible{outlin
     <h1>Subject Notes</h1>
     <p>Organise your notes according to the official Question Paper 01 syllabus. Expand a subject, open its topic hierarchy, add notes, or let the lottery choose one of your saved notes for a focused 15-minute session.</p>
   </div>
-  <div class="notes-v2-header-actions">
+  <div class="notes-v2-header-actions"><button class="btn outline" id="notesBackupBtn" type="button" title="Export all saved notes as a backup">↥ Notes Backup</button><button class="btn outline" id="notesRestoreBtn" type="button" title="Restore notes from a backup file">↧ Restore Notes</button><input id="notesRestoreFile" type="file" accept="application/json,.json" hidden>
     <span class="notes-sync-badge" id="notesSyncBadge">Auto-synced</span>
     <button class="btn outline" id="notesBackBtn" type="button">Back to Home</button>
   </div>
@@ -5884,6 +5884,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 })();
 </script>
 
+<script id="notes-backup-restore-v1">(function(){'use strict';const KEY='cgpsc_subject_html_notes_v2';const $=id=>document.getElementById(id);function read(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return {}}}function count(o){return Object.values(o||{}).reduce((n,a)=>n+(Array.isArray(a)?a.length:0),0)}function toast(msg){try{if(typeof window.toast==='function')window.toast(msg);else alert(msg)}catch(e){alert(msg)}}function download(data){const payload={format:'CGPSC Study Hub Notes Backup',version:1,exportedAt:new Date().toISOString(),notes:data};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='CGPSC_StudyHub_Notes_Backup_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}function merge(existing,incoming){const out=JSON.parse(JSON.stringify(existing&&typeof existing==='object'?existing:{}));Object.entries(incoming||{}).forEach(([subject,arr])=>{if(!Array.isArray(arr))return;const cur=Array.isArray(out[subject])?out[subject]:[];const byId=new Map(cur.filter(x=>x&&x.id!=null).map(x=>[String(x.id),x]));arr.forEach(n=>{if(!n||typeof n!=='object')return;const id=n.id!=null?String(n.id):null;if(id&&byId.has(id)){const old=byId.get(id),oldAt=Date.parse(old.updatedAt||0)||0,newAt=Date.parse(n.updatedAt||0)||0;if(newAt>=oldAt)byId.set(id,n)}else cur.push(n)});const rebuilt=[],seen=new Set();cur.forEach(n=>{if(!n||typeof n!=='object')return;const id=n.id!=null?String(n.id):'anon_'+rebuilt.length;if(seen.has(id))return;seen.add(id);rebuilt.push(byId.get(id)||n)});out[subject]=rebuilt});return out}function exportNotes(){const data=read(),n=count(data);if(!n){toast('No saved notes to back up yet.');return}download(data);toast('✓ Notes backup exported — '+n+' note'+(n===1?'':'s')+'.')}function restoreNotes(file){const fr=new FileReader();fr.onload=function(){try{const raw=JSON.parse(fr.result),incoming=raw&&raw.notes?raw.notes:raw;if(!incoming||typeof incoming!=='object'||Array.isArray(incoming))throw Error('Invalid notes backup format.');if(!Object.values(incoming).every(a=>Array.isArray(a)))throw Error('Invalid notes backup format.');const merged=merge(read(),incoming);localStorage.setItem(KEY,JSON.stringify(merged));try{if(typeof window.queueCloudSave==='function')window.queueCloudSave()}catch(e){}try{if(typeof window.notesRenderSubjects==='function')window.notesRenderSubjects()}catch(e){}try{if(typeof window.notesRender==='function')window.notesRender()}catch(e){}const n=count(incoming);toast('✓ Notes restored and merged — '+n+' note'+(n===1?'':'s')+' from backup.')}catch(e){toast('⚠ Could not restore notes: '+e.message)}};fr.readAsText(file)}document.addEventListener('DOMContentLoaded',function(){$('notesBackupBtn')?.addEventListener('click',exportNotes);$('notesRestoreBtn')?.addEventListener('click',()=>{$('notesRestoreFile')?.click()});$('notesRestoreFile')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(f)restoreNotes(f);e.target.value=''})});window.notesExportBackup=exportNotes;window.notesRestoreBackup=restoreNotes})();</script>
 <script id="kaushal-final-stability-pass">
 (function(){
   'use strict';
@@ -6661,6 +6662,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 .ntq-list{max-height:320px;overflow:auto;padding-bottom:6px}
 </style>
 
+
+<style id="topic-linked-quiz-ui">
+.ntq-linked-topic{margin:10px 0 8px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2,#f5f7fb);font-size:12px;font-weight:700;color:var(--accent,#2563eb);letter-spacing:.02em}
+</style>
 <script id="kaushal-notes-dash-quiz-js">
 /* Notes dashboard (notes read today) + 15-question topic test after a completed focus session. */
 (function(){
@@ -6931,7 +6936,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       <pre id="ntqSample"></pre>
       <div class="ntq-help-actions"><button type="button" class="btn outline" id="ntqCopySample">Copy example</button><button type="button" class="btn outline" id="ntqCopyPrompt">Copy AI prompt</button></div>
       <p style="font-size:12px;color:var(--muted)">Rules: <code>answer</code> must be one of the option letters. Statement, assertion-reason and match-the-following types work too, in the same format as Study Hub.</p></details>
-    <textarea id="ntqInput" spellcheck="false" placeholder='Paste JSON array here, e.g. [ { "type":"mcq", "question":"...", "options":{"A":"..","B":"..","C":"..","D":".."}, "answer":"A", "explanation":".." } ]'></textarea>
+    <div class="ntq-linked-topic" id="ntqLinkedTopic">LINKED TO THIS NOTES SUB-TOPIC</div><textarea id="ntqInput" spellcheck="false" placeholder='Paste JSON array here, e.g. [ { "type":"mcq", "question":"...", "options":{"A":"..","B":"..","C":"..","D":".."}, "answer":"A", "explanation":".." } ]'></textarea>
     <div class="ntq-actions"><span class="ntq-status" id="ntqStatus"></span><button type="button" class="btn primary" id="ntqAdd">Add to this topic</button></div>
     <details class="ntq-list-wrap"><summary id="ntqListSum">View / remove saved questions (0)</summary><div class="ntq-list" id="ntqList"></div></details>`}
 
@@ -6953,7 +6958,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   window.addEventListener('kaushal:topic-open',e=>{
     const d=e.detail||{};cur={subject:d.subject,group:d.group,topic:d.topic,key:d.subject+'|'+d.group+' › '+d.topic};
-    ensure();const i=$('ntqInput');if(i)i.value='';paintPanel(true);
+    ensure();const i=$('ntqInput');if(i)i.value='';paintPanel(true);const linked=$('ntqLinkedTopic');if(linked)linked.textContent='LINKED TO: '+cur.subject+' › '+cur.group+' › '+cur.topic;
   });
 
   const ns=$('notesScreen');
