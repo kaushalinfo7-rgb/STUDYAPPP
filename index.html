@@ -7476,5 +7476,31 @@ try{if(typeof App!=="undefined"&&App.questions&&App.questions.length&&typeof win
   },true);
 })();
 </script>
+<script id="kaushal-note-study-time-logger">
+/* Log time spent reading a saved note into Plan > Study time / Progress.
+   A note session is counted only after at least 2 minutes of visible reading.
+   Time pauses when the tab is hidden and resumes when the note is visible again. */
+(function(){
+  'use strict';
+  const MIN_READ_SECONDS=120;
+  const $=id=>document.getElementById(id);
+  let activeId='', segmentStart=0, accruedMs=0, qualified=false, activeTitle='', activeSubject='';
+  function readerVisible(){const e=$('noteReaderScreen');return !!e&&!e.classList.contains('hidden')&&document.visibilityState!=='hidden'&&!!window._currentOpenNoteId}
+  function getMeta(){return {id:String(window._currentOpenNoteId||''),title:(($('noteReaderTitle')||{}).textContent||'Saved note').trim(),subject:(($('noteReaderSubject')||{}).textContent||'Notes').split(' · ')[0].trim()||'Notes'}}
+  function accrue(now){if(segmentStart){accruedMs+=Math.max(0,now-segmentStart);segmentStart=now}}
+  function logSeconds(seconds){if(seconds<1||typeof window.kaushalLogStudyTime!=='function')return;window.kaushalLogStudyTime(seconds,{cat:activeSubject||'Notes',topic:activeTitle||'Saved note',src:'notes'});try{if($('planScreen')&&!$('planScreen').classList.contains('hidden')&&typeof window.planRender==='function')window.planRender()}catch(e){}try{if($('progressScreen')&&!$('progressScreen').classList.contains('hidden')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}}
+  function finish(){if(!activeId)return;accrue(Date.now());const secs=Math.floor(accruedMs/1000);if(qualified&&secs>0)logSeconds(secs);activeId='';segmentStart=0;accruedMs=0;qualified=false;activeTitle='';activeSubject=''}
+  function tick(){const visible=readerVisible(),meta=visible?getMeta():null,now=Date.now();
+    if(activeId&&(!visible||!meta||meta.id!==activeId)){finish()}
+    if(visible&&meta&&meta.id){if(!activeId){activeId=meta.id;activeTitle=meta.title;activeSubject=meta.subject;accruedMs=0;qualified=false;segmentStart=now}else{accrue(now)}
+      if(!qualified&&accruedMs>=MIN_READ_SECONDS*1000){qualified=true;const secs=Math.floor(accruedMs/1000);if(secs>0){logSeconds(secs);accruedMs-=secs*1000}}
+    }
+  }
+  setInterval(tick,1000);
+  document.addEventListener('visibilitychange',tick);
+  window.addEventListener('pagehide',()=>{if(activeId){accrue(Date.now());if(qualified&&accruedMs>0)logSeconds(Math.floor(accruedMs/1000));activeId='';segmentStart=0;accruedMs=0;qualified=false}});
+  tick();
+})();
+</script>
 </body>
 </html>
