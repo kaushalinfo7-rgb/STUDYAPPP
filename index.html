@@ -3040,6 +3040,17 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 </section>
 </div>
 <section class="bank-import-card">
+<section class="command-center">
+  <div class="cc-top"><div><span class="cc-kicker">YOUR DAILY MISSION</span><h2>Study Command Center</h2><p>Read smarter. Recall actively. Revise before you forget.</p></div><div class="cc-date" id="ccTodayLabel">TODAY · CGPSC PREP</div></div>
+  <div class="cc-metrics">
+    <article><span class="cc-icon">▤</span><small>Saved notes</small><strong id="ccNotesCount">0</strong><em>Knowledge base</em></article>
+    <article><span class="cc-icon">↻</span><small>Due for revision</small><strong id="ccDueCount">0</strong><em>Review queue</em></article>
+    <article><span class="cc-icon">◎</span><small>Topics mastered</small><strong id="ccMasteredCount">0</strong><em>Marked by you</em></article>
+    <article><span class="cc-icon">◷</span><small>Study momentum</small><strong id="ccStudyMinutes">0m</strong><em>Logged today</em></article>
+  </div>
+  <div class="cc-actions"><button type="button" data-cc-open="notes">▤ <span>Open Smart Notes</span><b>→</b></button><button type="button" data-cc-open="revision">↻ <span>Review mistakes</span><b>→</b></button><button type="button" data-cc-open="plan">✓ <span>Today's plan</span><b>→</b></button><button type="button" data-cc-open="hub">✦ <span>Practice questions</span><b>→</b></button></div>
+  <div class="cc-footer"><span><i></i> Notes, revision and progress are connected</span><span>CGPSC · CONSISTENCY OVER CRAMMING</span></div>
+</section>
 <div class="bank-import-head"><div><span class="bank-kicker">QUESTION BANK BUILDER</span><h2>Add questions to your Study Hub</h2><p>Select the subject first, then paste JSON or choose a JSON file. New questions are added to that subject's existing bank.</p></div><div class="bank-cloud-pill">☁ Auto-synced</div></div>
 <div class="bank-import-row">
 <label class="bank-field"><span>Subject</span><select id="bankSubjectSelect"></select></label>
@@ -3069,6 +3080,13 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
     <button class="btn outline" id="notesBackBtn" type="button">Back to Home</button>
   </div>
 </header>
+
+<section class="smart-notes-panel" aria-label="Smart notes dashboard">
+  <div class="sn-head"><div><span class="sn-kicker">LEARN · RECALL · RETAIN</span><h2>Your Smart Notes</h2><p>Every note can have a study status, personal learning layer and a next review date.</p></div><div class="sn-search-wrap"><span>⌕</span><input id="snSearch" type="search" placeholder="Search note titles, subjects…" aria-label="Search notes"></div></div>
+  <div class="sn-filter-row"><div class="sn-status-tabs" role="group" aria-label="Filter notes by status"><button class="active" data-sn-filter="all">All <b id="snAllCount">0</b></button><button data-sn-filter="not-started">Not started</button><button data-sn-filter="reading">Reading</button><button data-sn-filter="revision">Needs revision <b id="snDueBadge">0</b></button><button data-sn-filter="mastered">Mastered</button></div><button type="button" class="btn outline" id="snResumeBtn">▶ Resume last note</button></div>
+  <div class="sn-list" id="snNotesList"><div class="sn-empty">Your saved notes will appear here.</div></div>
+  <div class="sn-footnote">Review intervals: 1 · 3 · 7 · 14 · 30 days. Ratings adjust the next review; note IDs and existing HTML are preserved.</div>
+</section>
 
 <section class="notes-v2-toolbar">
   <div class="notes-v2-toolbar-copy">
@@ -3162,6 +3180,15 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
   </main>
 </section>
 </div>
+</div>
+<div class="sn-modal hidden" id="snPersonalModal" role="dialog" aria-modal="true" aria-labelledby="snPersonalTitle">
+ <div class="sn-modal-box"><div class="sn-modal-head"><div><span class="sn-kicker">YOUR PERSONAL LEARNING LAYER</span><h2 id="snPersonalTitle">Topic study notes</h2><p id="snPersonalSubtitle"></p></div><button type="button" id="snPersonalClose" aria-label="Close">×</button></div>
+ <label>My short summary<textarea id="snSummary" rows="3" placeholder="Explain this topic in your own words…"></textarea></label>
+ <label>Important facts<textarea id="snFacts" rows="3" placeholder="Dates, Articles, definitions, statistics…"></textarea></label>
+ <label>Mistakes to avoid<textarea id="snMistakes" rows="2" placeholder="What did I confuse or get wrong?"></textarea></label>
+ <label>Questions to revisit<textarea id="snDoubts" rows="2" placeholder="Doubts or concepts to resolve later…"></textarea></label>
+ <div class="sn-modal-actions"><button type="button" class="btn outline" id="snPersonalCancel">Cancel</button><button type="button" class="btn primary" id="snPersonalSave">Save learning layer</button></div>
+ </div>
 </div>
 <div aria-label="Saved HTML Note" class="screen hidden" id="noteReaderScreen">
 <div class="notes-reader-shell">
@@ -7526,5 +7553,64 @@ try{if(typeof App!=="undefined"&&App.questions&&App.questions.length&&typeof win
   tick();
 })();
 </script>
+<style id="kaushal-command-center-v2">
+:root{--cc-ink:#103d40;--cc-teal:#176c70;--cc-mint:#e4f2ec;--cc-gold:#f2cc78}
+.command-center{margin:0 0 28px;padding:24px;border-radius:22px;background:linear-gradient(130deg,#07383c,#0c555a 65%,#146c6e);color:#f8fbf7;box-shadow:0 16px 34px #083d401b;position:relative;overflow:hidden}
+.command-center:after{content:"";position:absolute;width:260px;height:260px;border:1px solid #ffffff18;border-radius:50%;right:-90px;top:-125px;box-shadow:0 0 0 30px #ffffff08,0 0 0 65px #ffffff05;pointer-events:none}
+.cc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;position:relative;z-index:1}.cc-kicker,.sn-kicker{font-size:10px;letter-spacing:.16em;font-weight:950;color:#f2cc78}.cc-top h2{font-size:clamp(23px,2.2vw,32px);letter-spacing:-.04em;line-height:1.15;margin:5px 0;color:white}.cc-top p{margin:0;color:#d3e7e2;font-size:13px}.cc-date{padding:8px 11px;border:1px solid #ffffff36;border-radius:99px;color:#f4d995;font-size:9px;font-weight:900;white-space:nowrap}
+.cc-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:22px 0 14px;position:relative;z-index:1}.cc-metrics article{padding:14px;border-radius:15px;border:1px solid #ffffff20;background:#ffffff0e;min-width:0}.cc-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#f2cc7824;color:#ffdb8c;font-size:19px;margin-bottom:12px}.cc-metrics small,.cc-metrics em{display:block;color:#d1e5e0;font-size:10px;font-style:normal}.cc-metrics strong{display:block;color:#fff;font-size:27px;line-height:1.2;margin:4px 0}.cc-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;position:relative;z-index:1}.cc-actions button{display:flex;align-items:center;gap:9px;text-align:left;padding:12px;border-radius:12px;background:#f9f8ef;color:#12474a;font-weight:850;font-size:12px;min-width:0}.cc-actions button:hover{transform:translateY(-2px);box-shadow:0 7px 18px #001f2029}.cc-actions button span{flex:1}.cc-actions button b{font-size:17px}.cc-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid #ffffff25;padding-top:13px;margin-top:17px;color:#cce2dc;font-size:9px;letter-spacing:.05em}.cc-footer i{display:inline-block;width:7px;height:7px;background:#8ed8ad;border-radius:50%;margin-right:6px}
+.smart-notes-panel{margin:20px 0 24px;padding:20px;border:1px solid var(--border);border-radius:20px;background:var(--surface);box-shadow:var(--shadow);color:var(--text)}.sn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px}.sn-head h2{margin:4px 0;font-size:24px;letter-spacing:-.03em;color:var(--primary-dark)}.sn-head p{margin:0;color:var(--muted);font-size:12px}.sn-kicker{color:#a27b28}.sn-search-wrap{display:flex;align-items:center;gap:8px;width:min(340px,100%);padding:0 12px;border:1px solid var(--border);border-radius:12px;background:var(--soft);color:var(--muted)}.sn-search-wrap span{font-size:22px}.sn-search-wrap input{width:100%;min-width:0;height:42px;border:0!important;outline:none;background:transparent!important;color:var(--text)!important;font-size:12px}.sn-filter-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0 12px}.sn-status-tabs{display:flex;gap:6px;flex-wrap:wrap}.sn-status-tabs button{border:1px solid var(--border);border-radius:99px;padding:8px 11px;background:var(--soft);color:var(--text);font-size:10px;font-weight:850}.sn-status-tabs button.active{background:var(--primary-dark);color:white;border-color:var(--primary-dark)}.sn-status-tabs b{margin-left:4px}.sn-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.sn-note{border:1px solid var(--border);border-radius:13px;padding:13px;min-width:0;background:var(--soft)}.sn-note-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.sn-note h3{font-size:13px;line-height:1.4;margin:0;color:var(--text);overflow-wrap:anywhere}.sn-note-sub{font-size:10px;color:var(--muted);margin-top:4px}.sn-pill{display:inline-flex;padding:4px 7px;border-radius:99px;background:#e5efeb;color:#245e53;font-size:9px;font-weight:900;white-space:nowrap}.sn-pill.due{background:#fff0d0;color:#865c12}.sn-note-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:12px}.sn-note-actions button{border:1px solid var(--border);border-radius:8px;padding:7px 9px;background:var(--surface);color:var(--primary-dark);font-size:10px;font-weight:850}.sn-note-actions .sn-open{background:var(--primary);border-color:var(--primary);color:#fff}.sn-note-actions select{max-width:125px;padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:10px;color:var(--text)}.sn-empty{grid-column:1/-1;text-align:center;padding:24px;border:1px dashed var(--border);border-radius:12px;color:var(--muted);font-size:12px}.sn-footnote{margin-top:12px;color:var(--muted);font-size:10px}
+.sn-modal{position:fixed;inset:0;z-index:3000;background:#082e32b8;display:flex;align-items:center;justify-content:center;padding:18px}.sn-modal.hidden{display:none!important}.sn-modal-box{width:min(650px,100%);max-height:90vh;overflow:auto;background:var(--surface);color:var(--text);border-radius:20px;padding:22px;box-shadow:0 25px 80px #001c1f55}.sn-modal-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.sn-modal-head h2{margin:4px 0;font-size:23px}.sn-modal-head p{margin:0;color:var(--muted);font-size:12px}.sn-modal-head>button{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--soft);color:var(--text);font-size:24px}.sn-modal-box label{display:block;font-size:12px;font-weight:850;margin:12px 0;color:var(--text)}.sn-modal-box textarea{display:block;min-height:65px;width:100%;box-sizing:border-box;margin-top:6px;padding:10px;border:1px solid var(--border)!important;border-radius:10px;background:var(--soft)!important;color:var(--text)!important;font:inherit;font-size:12px;resize:vertical}.sn-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+@media(max-width:700px){.cc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.cc-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.cc-top{flex-direction:column}.cc-date{display:none}.command-center{padding:18px}.sn-head{flex-direction:column}.sn-search-wrap{width:100%;box-sizing:border-box}.sn-list{grid-template-columns:1fr}.smart-notes-panel{padding:14px}.sn-filter-row #snResumeBtn{width:100%}}
+@media(prefers-reduced-motion:reduce){.cc-actions button{transition:none}}
+</style>
+<script id="kaushal-smart-notes-dashboard-v1">
+(function(){
+'use strict';
+const NOTES_KEY='cgpsc_subject_html_notes_v2', META_KEY='kaushal_smart_note_meta_v1';
+const $=id=>document.getElementById(id);
+const read=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(e){return f}};
+const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));if(typeof window.queueCloudSave==='function')window.queueCloudSave()}catch(e){}};
+const allNotes=()=>{const d=read(NOTES_KEY,{}),out=[];Object.entries(d||{}).forEach(([subject,arr])=>(Array.isArray(arr)?arr:[]).forEach(n=>{if(n&&n.id!=null)out.push({...n,subject})}));return out};
+const meta=()=>read(META_KEY,{});
+const saveMeta=m=>write(META_KEY,m);
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const datePlus=days=>{const d=new Date();d.setDate(d.getDate()+days);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const due=n=>{const m=meta()[String(n.id)]||{};return m.status==='revision'||!!m.nextReview&&m.nextReview<=today()};
+function safe(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function openNote(n){try{write('kaushal_smart_last_note_v1',String(n.id));if(typeof window.notesOpenReader==='function')window.notesOpenReader(n.id);else if(typeof window.notesOpenSavedNote==='function')window.notesOpenSavedNote(n.id);else if(typeof window.openSavedNote==='function')window.openSavedNote(n.id);else if(typeof window.notesOpen==='function'){window.notesOpen();setTimeout(()=>{const b=document.querySelector('[data-open-note-v2="'+CSS.escape(String(n.id))+'"]');b?.click()},150)}}catch(e){}}
+let filter='all';
+function render(){
+ const notes=allNotes(),m=meta(),q=($('snSearch')?.value||'').toLowerCase().trim(),dueNotes=notes.filter(due),mastered=notes.filter(n=>(m[String(n.id)]||{}).status==='mastered');
+ if($('ccNotesCount'))$('ccNotesCount').textContent=notes.length;if($('ccDueCount'))$('ccDueCount').textContent=dueNotes.length;if($('ccMasteredCount'))$('ccMasteredCount').textContent=mastered.length;if($('snAllCount'))$('snAllCount').textContent=notes.length;if($('snDueBadge'))$('snDueBadge').textContent=dueNotes.length;
+ if($('ccTodayLabel'))$('ccTodayLabel').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}).toUpperCase();
+ const filtered=notes.filter(n=>{const mm=m[String(n.id)]||{},st=mm.status||'not-started';return (filter==='all'||(filter==='revision'?due(n):st===filter))&&(!q||(String(n.title||'').toLowerCase()+' '+n.subject.toLowerCase()+' '+String(n.topic||'').toLowerCase()).includes(q))}).slice(0,12);
+ const list=$('snNotesList');if(!list)return;
+ if(!filtered.length){list.innerHTML='<div class="sn-empty">'+(notes.length?'No notes match this filter.':'No saved notes yet. Add a note or import existing notes; they will appear here automatically.')+'</div>';return}
+ list.innerHTML=filtered.map(n=>{const mm=m[String(n.id)]||{},st=mm.status||'not-started',isDue=due(n),next=mm.nextReview||'Not scheduled';return '<article class="sn-note"><div class="sn-note-top"><div><h3>'+safe(n.title||'Untitled note')+'</h3><div class="sn-note-sub">'+safe(n.subject)+(n.topic?' · '+safe(n.topic):'')+' · '+(isDue?'Review due':('Next review '+safe(next)))+'</div></div><span class="sn-pill '+(isDue?'due':'')+'">'+({'not-started':'Not started','reading':'Reading','revision':'Needs revision','mastered':'Mastered'}[st]||'Not started')+'</span></div><div class="sn-note-actions"><button class="sn-open" data-sn-open="'+safe(n.id)+'">Open note →</button><button data-sn-personal="'+safe(n.id)+'">✎ Personal notes</button><select aria-label="Study status" data-sn-status="'+safe(n.id)+'"><option value="not-started" '+(st==='not-started'?'selected':'')+'>Not started</option><option value="reading" '+(st==='reading'?'selected':'')+'>Reading</option><option value="revision" '+(st==='revision'?'selected':'')+'>Needs revision</option><option value="mastered" '+(st==='mastered'?'selected':'')+'>Mastered</option></select><button data-sn-rate="again" data-sn-id="'+safe(n.id)+'">Again</button><button data-sn-rate="hard" data-sn-id="'+safe(n.id)+'">Hard</button><button data-sn-rate="good" data-sn-id="'+safe(n.id)+'">Good</button><button data-sn-rate="easy" data-sn-id="'+safe(n.id)+'">Easy</button></div></article>'}).join('');
+}
+document.addEventListener('click',e=>{
+ const f=e.target.closest('[data-sn-filter]');if(f){filter=f.dataset.snFilter;document.querySelectorAll('[data-sn-filter]').forEach(b=>b.classList.toggle('active',b===f));render();return}
+ const op=e.target.closest('[data-sn-open]');if(op){const n=allNotes().find(x=>String(x.id)===op.dataset.snOpen);if(n)openNote(n);return}
+ const rate=e.target.closest('[data-sn-rate]');if(rate){const id=String(rate.dataset.snId),m=meta(),old=m[id]||{},r=rate.dataset.snRate,interval={again:1,hard:3,good:7,easy:30}[r];m[id]={...old,status:r==='again'?'revision':(old.status||'reading'),lastStudied:today(),lastRating:r,nextReview:datePlus(interval)};saveMeta(m);render();return}
+ const nav=e.target.closest('[data-cc-open]');if(nav){const v=nav.dataset.ccOpen;if(v==='notes')document.getElementById('notesHomeBtn')?.click();if(v==='revision')document.getElementById('revisionOpenBtn')?.click();if(v==='plan')document.getElementById('studyPlanHomeBtn')?.click();if(v==='hub')document.getElementById('studyHubHomeBtn')?.click();return}
+ const p=e.target.closest('[data-sn-personal]');if(p){openPersonal(p.dataset.snPersonal);return}
+ if(e.target.closest('#snPersonalClose,#snPersonalCancel')){closePersonal();return}
+ if(e.target.closest('#snPersonalSave')){if(!editingPersonalId)return;const m=meta(),old=m[editingPersonalId]||{};m[editingPersonalId]={...old,personal:{summary:$('snSummary').value,facts:$('snFacts').value,mistakes:$('snMistakes').value,doubts:$('snDoubts').value},personalUpdatedAt:new Date().toISOString()};saveMeta(m);closePersonal();if(typeof window.toast==='function')window.toast('Personal learning layer saved');render();return}
+ if(e.target.id==='snPersonalModal')closePersonal();
+});
+document.addEventListener('change',e=>{const sel=e.target.closest('[data-sn-status]');if(!sel)return;const m=meta(),id=String(sel.dataset.snStatus),old=m[id]||{};m[id]={...old,status:sel.value,lastStudied:old.lastStudied||today()};if(sel.value==='mastered'&&!old.nextReview)m[id].nextReview=datePlus(30);saveMeta(m);render()});
+let editingPersonalId='';
+function closePersonal(){$('snPersonalModal')?.classList.add('hidden');editingPersonalId=''}
+function openPersonal(id){const n=allNotes().find(x=>String(x.id)===String(id));if(!n)return;editingPersonalId=String(id);const v=(meta()[editingPersonalId]||{}).personal||{};$('snPersonalTitle').textContent=n.title||'Topic study notes';$('snPersonalSubtitle').textContent=n.subject+(n.topic?' · '+n.topic:'');$('snSummary').value=v.summary||'';$('snFacts').value=v.facts||'';$('snMistakes').value=v.mistakes||'';$('snDoubts').value=v.doubts||'';$('snPersonalModal').classList.remove('hidden')}
+$('snSearch')?.addEventListener('input',render);
+$('snResumeBtn')?.addEventListener('click',()=>{const id=read('kaushal_smart_last_note_v1',''),notes=allNotes(),n=notes.find(x=>String(x.id)===String(id))||notes.find(x=>(meta()[String(x.id)]||{}).status==='reading')||notes[0];if(n)openNote(n);else alert('Save a note first, then you can resume it here.')});
+window.kaushalSmartNotesRender=render;
+document.addEventListener('DOMContentLoaded',render);
+window.addEventListener('storage',e=>{if(e.key===NOTES_KEY||e.key===META_KEY)render()});
+setInterval(()=>{if(!$('start')?.classList.contains('hidden')||!$('notesScreen')?.classList.contains('hidden'))render()},15000);
+})();
+</script>
+
 </body>
 </html>
