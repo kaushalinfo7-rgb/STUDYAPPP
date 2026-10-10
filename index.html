@@ -6301,6 +6301,21 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   let selected={subject:'',group:'',topic:''};
   let editingId='';
   let search='';
+  // Remember the expanded syllabus groups and scroll position when entering a topic.
+  let notesLibraryScrollY=0;
+  let notesLibraryOpenGroups=[];
+  const groupStateKey=(subject,group)=>subject+'|'+group;
+  function captureLibraryState(){
+    notesLibraryScrollY=window.scrollY||window.pageYOffset||0;
+    notesLibraryOpenGroups=Array.from(document.querySelectorAll('#ntfLibrary details.ntf-group[open]'))
+      .map(el=>el.dataset.groupKey).filter(Boolean);
+  }
+  function restoreLibraryState(){
+    document.querySelectorAll('#ntfLibrary details.ntf-group').forEach(el=>{
+      el.open=notesLibraryOpenGroups.includes(el.dataset.groupKey);
+    });
+    requestAnimationFrame(()=>window.scrollTo(0,notesLibraryScrollY));
+  }
   let originalNotesScreenHTML='';
 
   /* ---------- Focus Lottery (15-minute session, 10-day cooldown) ---------- */
@@ -6541,7 +6556,9 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
         </header>
         <div class="ntf-groups">${visibleGroups.map(g=>{
           const topics=g[1], groupNotes=topics.reduce((n,t)=>n+topicNotes(d,sub.name,g[0],t).length,0);
-          return `<details class="ntf-group" ${q?'open':''}>
+          const gKey=groupStateKey(sub.name,g[0]);
+          const shouldOpen=q||notesLibraryOpenGroups.includes(gKey);
+          return `<details class="ntf-group" data-group-key="${esc(gKey)}" ${shouldOpen?'open':''}>
             <summary class="ntf-group-title"><span></span><span>${esc(g[0])}</span><span class="ntf-group-count">${groupNotes} saved</span></summary>
             <div class="ntf-topic-grid">${topics.map(t=>{
               const count=topicNotes(d,sub.name,g[0],t).length;
@@ -6577,6 +6594,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     $('ntfNoteList').querySelectorAll('[data-delete-note]').forEach(b=>b.onclick=()=>deleteSavedNote(b.dataset.deleteNote));
   }
   function openTopic(subject,group,topic,keepEditor=false){
+    captureLibraryState();
     selected={subject,group,topic};
     editingId=keepEditor?editingId:'';
     $('ntfLibraryWrap').style.display='none';
@@ -6667,7 +6685,9 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   function backToLibrary(){
     editingId='';$('ntfWorkspace').classList.remove('is-open');$('ntfLibraryWrap').style.display='';
-    renderLibrary();window.scrollTo(0,0);
+    renderLibrary();
+    // Reopen the same syllabus groups and return to the exact place the user left.
+    restoreLibraryState();
   }
   function showNotes(){
     if(typeof window.setActiveView==='function')try{window.setActiveView('notes')}catch(e){}
@@ -6727,6 +6747,8 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   // Reader buttons return to the exact topic instead of the old common editor.
   window.notesCloseReader=function(){
     $('noteReaderScreen')?.classList.add('hidden');
+    // Keep the topic/library navigation context intact while reopening the Notes page.
+    captureLibraryState();
     showNotes();
     if(window._currentOpenNoteId){
       const d=load();
@@ -6741,6 +6763,8 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
         }
       }
     }
+    // openTopic normally starts at the top; a reader return should preserve the previous library position.
+    requestAnimationFrame(()=>{if(!$('noteReaderScreen')?.classList.contains('hidden'))return;window.scrollTo(0,notesLibraryScrollY)});
   };
   window.notesEditOpenNote=function(){
     const id=window._currentOpenNoteId;if(!id)return;
