@@ -5375,9 +5375,15 @@ S(()=>rebind('progressRefreshBtn',()=>progressRenderDashboard()));
 S(()=>{const g=$('hubSubjectGrid');new MutationObserver(()=>{g.querySelectorAll('[data-hub-practice]:not([data-fx])').forEach(p=>{p.dataset.fx=1;const b=document.createElement('button');b.className='hub-practice-btn';b.style.marginLeft='5px';b.textContent='Clear';b.onclick=async()=>{const s=p.dataset.hubPractice;if(!(await uiDialog('Delete ALL questions in "'+s+'"?',{ok:'Delete'})))return;const d=bankLoad();delete d[s];bankSave(d);bankRenderHub()};p.after(b)})}).observe(g,{childList:true});
 const box=$('studyHubRefreshBtn').parentNode,mk=(t,f)=>{const b=document.createElement('button');b.className='btn outline';b.type='button';b.textContent=t;b.onclick=f;box.prepend(b);return b};
 const fi=document.createElement('input');fi.type='file';fi.accept='.json';fi.hidden=true;document.body.appendChild(fi);
-fi.onchange=()=>{const f=fi.files[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{const o=JSON.parse(r.result);if(!(await uiDialog('Restore backup? This replaces the data on this device.',{ok:'Restore'})))return;Object.entries(o).forEach(([k,v])=>{if(k.startsWith('cgpsc_'))localStorage.setItem(k,v)});localStorage.setItem(EDIT_KEY,new Date().toISOString());localStorage.removeItem(SIG_KEY);location.reload()}catch(e){toast('Invalid backup file.')}};r.readAsText(f)};
+fi.id='kaushalBackupFile';fi.onchange=()=>{const f=fi.files[0];fi.value='';if(f){if(typeof window.__kbRestore==='function')window.__kbRestore(f);else toast('⚠ Restore is not ready yet — please reload the page.')}};
+/* ---- backup helpers (shared by Export + Restore) ---- */
+const KB_EXCLUDE=new Set(['cgpsc_cloud_snapshot_v1','cgpsc_srv_ver_v3','cgpsc_sync_sig_v1','cgpsc_sync_sig_v3','cgpsc_force_push_v3','cgpsc_mig_v3','cgpsc_last_edit_v1','cgpsc_mock_v2','cgpsc_hall_session_v1','cgpsc_study_timer_v1','cgpsc_notes_focus_timer_v1','cgpsc_notes_focus_timer_v2','cgpsc_active_view_v1','cgpsc_topic_quiz_pending_v1']);
+window.__kbIsData=k=>typeof k==='string'&&(k.startsWith('cgpsc_')||k.startsWith('kaushal_'))&&!KB_EXCLUDE.has(k);
+window.__kbCollect=()=>{const data={};let mem=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(window.__kbIsData(k)){const v=localStorage.getItem(k);if(v!==null)data[k]=v}}}catch(e){console.warn('backup: localStorage unreadable',e)}
+try{if(typeof SAFE_STORAGE_MEMORY==='object')Object.keys(SAFE_STORAGE_MEMORY).forEach(k=>{if(window.__kbIsData(k)){data[k]=String(SAFE_STORAGE_MEMORY[k]);mem++}})}catch(e){}
+return {data,mem}};
 mk('Restore Backup',()=>fi.click());
-mk('Export Backup',()=>{const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('cgpsc_'))o[k]=localStorage.getItem(k)}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'}));a.download='kaushal-backup-'+trackerDate(new Date())+'.json';a.click()})});
+mk('Export Backup',()=>{try{const {data,mem}=window.__kbCollect(),n=Object.keys(data).length;if(!n){toast('⚠ Nothing to back up yet.');return}const payload={format:'CGPSC Study Hub Backup',version:2,exportedAt:new Date().toISOString(),count:n,data};const json=JSON.stringify(payload);const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='kaushal-backup-'+trackerDate(new Date())+'.json';a.style.display='none';document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},1500);toast('✓ Backup exported — '+n+' items, '+Math.max(1,Math.round(json.length/1024))+' KB'+(mem?' ('+mem+' unsaved item'+(mem===1?'':'s')+' recovered from memory — storage is full, clear old data!)':'')+'.')}catch(e){console.error(e);toast('⚠ Export failed: '+(e&&e.message||e))}})});
 
 /* ---------- cloud sync: real edit timestamps, no pre-load uploads, all collections applied ---------- */
 function syncSig(){return hashStr(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionMerge(App.revision,revisionLoad()),storageGet(ATT_KEY,''),App.state.answers,App.questions.length]))}
@@ -5497,7 +5503,23 @@ S(()=>{const v=$('loadBtn'),b=document.createElement('button');b.className='btn 
 /* ---------- navigation, keyboard, restore ---------- */
 const _sav=setActiveView;setActiveView=function(v){_sav(v);if(v==='home'){if(history.state&&history.state.v&&history.state.v!=='exam')history.back()}else if(history.state&&history.state.v&&history.state.v!=='exam')history.replaceState({v},'');else history.pushState({v},'')};
 window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'&&e.target?.id==='notesHtmlInput'){e.preventDefault();notesSaveCurrent()}},true);
-S(()=>{const fi=[...document.querySelectorAll('input[type=file][hidden]')].pop();if(fi)fi.onchange=()=>{const f=fi.files[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{const o=JSON.parse(r.result);if(!(await dlg('Restore this backup? It replaces the data on this device and then syncs to the cloud.',{ok:'Restore'})))return;Object.entries(o).forEach(([k,v])=>{if(k.startsWith('cgpsc_')&&![VER,SYNC,FORCE,'cgpsc_cloud_snapshot_v1'].includes(k))localStorage.setItem(k,v)});localStorage.setItem(FORCE,'1');location.reload()}catch(e){toast('Invalid backup file.')}};r.readAsText(f)}});
+S(()=>{window.__kbRestore=function(file){const r=new FileReader();r.onerror=()=>toast('⚠ Could not read the file.');r.onload=async()=>{
+let o;try{o=JSON.parse(r.result)}catch(e){toast('⚠ Not a valid backup file (invalid JSON).');return}
+if(!o||typeof o!=='object'||Array.isArray(o)){toast('⚠ Not a valid backup file.');return}
+if(o.format==='CGPSC Study Hub Notes Backup'||(o.notes&&!o.data)){toast('⚠ This is a Notes-only backup. Use Notes → Restore for it.');return}
+const src=(o.data&&typeof o.data==='object'&&!Array.isArray(o.data))?o.data:o;
+const items={};Object.entries(src).forEach(([k,v])=>{if(!window.__kbIsData(k)||![VER,SYNC,FORCE,'cgpsc_cloud_snapshot_v1'].every(x=>x!==k))return;if(v===null||v===undefined)return;items[k]=typeof v==='string'?v:JSON.stringify(v)});
+const keys=Object.keys(items);
+if(!keys.length){toast('⚠ No study data found in this file — nothing was restored.');return}
+if(!(await dlg('Restore this backup ('+keys.length+' items)? Data in the file overwrites matching data on this device (anything newer, such as notes created after the backup, is replaced) and then syncs to the cloud. Items not in the file are kept.',{ok:'Restore'})))return;
+const prev={};keys.forEach(k=>{try{prev[k]=localStorage.getItem(k)}catch(e){prev[k]=null}});
+/* reset the IndexedDB notes mirror so it cannot bring deleted/newer notes back; the write hook re-seeds it from the restored notes */
+try{if(window.indexedDB)await new Promise(res=>{const q=indexedDB.deleteDatabase('cgpsc_notes_backup');q.onsuccess=q.onerror=q.onblocked=()=>res();setTimeout(res,1500)})}catch(e){}
+try{keys.forEach(k=>localStorage.setItem(k,items[k]))}
+catch(e){keys.forEach(k=>{try{if(prev[k]===null)localStorage.removeItem(k);else localStorage.setItem(k,prev[k])}catch(_){}});toast('⚠ Restore failed — device storage is full. Nothing was changed. Clear old data and try again.');return}
+try{localStorage.setItem(FORCE,'1')}catch(e){}
+toast('✓ Backup restored — '+keys.length+' items. Reloading…');
+setTimeout(()=>location.reload(),700)};r.readAsText(file)}});
 S(()=>{document.querySelectorAll('.quickquiz-stats strong').forEach(e=>{if(e.textContent==='Random')e.textContent='Smart mix'});const i=document.getElementById('infoText')?.parentNode;if(i)i.innerHTML=i.innerHTML.replace('Timer and marking settings can be changed below before starting.','Marking: +'+App.cfg.correct+' / −'+App.cfg.incorrect+' per question.')});
 })();
 
