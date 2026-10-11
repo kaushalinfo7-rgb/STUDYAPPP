@@ -3642,12 +3642,12 @@ function startExam(resume=false){if(!App.questions.length)return;if(!resume){App
 function startTimer(){clearInterval(App.timer);tick();App.timer=setInterval(()=>{if(App.state.remaining<=0){clearInterval(App.timer);submitExam();return}App.state.remaining--;tick();if(App.state.remaining%5===0)save()},1000)}
 function tick(){let n=App.state.remaining,h=Math.floor(n/3600),m=Math.floor(n%3600/60),s=n%60;let t=$('timer');t.textContent=[h,m,s].map(v=>String(v).padStart(2,'0')).join(':');t.classList.toggle('warn',n<=900&&n>300);t.classList.toggle('critical',n<=300)}
 function render(){if(!App.questions.length)return;App.state.index=Math.max(0,Math.min(App.state.index,App.questions.length-1));let q=App.questions[App.state.index];$('currentNo').textContent=App.state.index+1;$('qTitle').textContent='Question '+(App.state.index+1);$('topic').textContent=q.topic;updateVisualProgress();renderQuestion(q);$('prevBtn').disabled=App.state.index===0;$('nextBtn').textContent=App.state.index===App.questions.length-1?'Save & Submit':'Save & Next';}
-function renderQuestion(q){let box=$('questionContent');box.innerHTML='';if(q.type==='multiple_statement')renderStatements(box,q);else if(q.type==='assertion_reason')renderAR(box,q);else if(q.type==='match_following')renderMatch(box,q);else renderMCQ(box,q);renderOptions(q);}
+function renderQuestion(q){let box=$('questionContent');box.innerHTML='';if(q.type==='multiple_statement')renderStatements(box,q);else if(q.type==='assertion_reason')renderAR(box,q);else if(q.type==='match_following')renderMatch(box,q);else renderMCQ(box,q);renderOptions(q);if(window.kaushalFormatChemistry)window.kaushalFormatChemistry(box);}
 function renderMCQ(box,q){if(q.passage){let p=document.createElement('div');p.className='passage';p.textContent=q.passage;box.appendChild(p)}let d=document.createElement('div');d.textContent=q.question||q.question_intro||'';box.appendChild(d)}
 function renderStatements(box,q){let intro=document.createElement('div');intro.className='question-intro';intro.textContent=q.question_intro||q.question||'Consider the following statements:';box.appendChild(intro);let list=document.createElement('div');list.className='statement-box';(q.statements||[]).forEach((s,i)=>{let row=document.createElement('div');row.className='statement';let n=document.createElement('strong');n.textContent=(i+1)+'.';let t=document.createElement('span');t.textContent=s;row.append(n,t);list.appendChild(row)});box.appendChild(list);if(q.question_ending){let end=document.createElement('div');end.className='question-ending';end.textContent=q.question_ending;box.appendChild(end)}}
 function renderAR(box,q){let title=document.createElement('div');title.className='question-intro';title.textContent=q.question_intro||q.question||'Read the following Assertion and Reason:';box.appendChild(title);let ar=document.createElement('div');ar.className='ar-box';[['Assertion (A)',q.assertion],['Reason (R)',q.reason]].forEach(([lab,val])=>{let d=document.createElement('div');d.className='ar-item';let b=document.createElement('span');b.className='ar-label';b.textContent=lab;d.append(b,document.createTextNode(val||''));ar.appendChild(d)});box.appendChild(ar);if(q.question_ending){let e=document.createElement('div');e.className='question-ending';e.textContent=q.question_ending;box.appendChild(e)}}
 function renderMatch(box,q){let ins=document.createElement('div');ins.className='question-intro';ins.textContent=q.instruction||q.question||'Match List-I with List-II:';box.appendChild(ins);let table=document.createElement('table');table.className='match-table';let tr=table.insertRow();let h1=tr.insertCell();h1.outerHTML='<th>List-I</th>';let h2=tr.insertCell();h2.outerHTML='<th>List-II</th>';(q.pairs||[]).forEach((p,i)=>{let r=table.insertRow();r.insertCell().textContent=`${i+1}. ${p.left}`;r.insertCell().textContent=`${String.fromCharCode(97+i)}. ${p.right}`});box.appendChild(table);if(q.question_ending){let e=document.createElement('div');e.className='question-ending';e.textContent=q.question_ending;box.appendChild(e)}}
-function renderOptions(q){let c=$('options');c.innerHTML='';Object.entries(q.options||{}).forEach(([key,val])=>{let label=document.createElement('label');label.className='option';let input=document.createElement('input');input.type='radio';input.name='qopt';input.value=key;input.checked=App.state.answers[q.id]===key;let k=document.createElement('span');k.className='option-key';k.textContent=key+'.';let v=document.createElement('span');v.textContent=val;label.append(input,k,v);if(input.checked)label.classList.add('selected');input.onchange=()=>{const wasAnswered=!!App.state.answers[q.id];App.state.answers[q.id]=key;App.state.status[q.id]='answered';if(!wasAnswered)trackerRecordQuestion(q);if(String(key).toUpperCase()!==String(q.answer).toUpperCase())revisionRecordQuestion(q,key);document.querySelectorAll('.option').forEach(x=>x.classList.remove('selected'));label.classList.add('selected');renderPalette();save()};c.appendChild(label)})}
+function renderOptions(q){let c=$('options');c.innerHTML='';Object.entries(q.options||{}).forEach(([key,val])=>{let label=document.createElement('label');label.className='option';let input=document.createElement('input');input.type='radio';input.name='qopt';input.value=key;input.checked=App.state.answers[q.id]===key;let k=document.createElement('span');k.className='option-key';k.textContent=key+'.';let v=document.createElement('span');v.textContent=val;label.append(input,k,v);if(input.checked)label.classList.add('selected');input.onchange=()=>{const wasAnswered=!!App.state.answers[q.id];App.state.answers[q.id]=key;App.state.status[q.id]='answered';if(!wasAnswered)trackerRecordQuestion(q);if(String(key).toUpperCase()!==String(q.answer).toUpperCase())revisionRecordQuestion(q,key);document.querySelectorAll('.option').forEach(x=>x.classList.remove('selected'));label.classList.add('selected');renderPalette();save()};c.appendChild(label)});if(window.kaushalFormatChemistry)window.kaushalFormatChemistry(c)}
 function renderPalette(){let c=$('paletteGrid');c.innerHTML='';App.questions.forEach((q,i)=>{let b=document.createElement('button');b.className='qbtn';let st=App.state.status[q.id];if(st==='answered')b.classList.add('answered');if(st==='marked')b.classList.add('marked');if(st==='ansmarked')b.classList.add('ansmarked');if(st==='not-answered'||st==='visited')b.classList.add('not-answered');if(i===App.state.index)b.classList.add('current');b.textContent=i+1;b.onclick=()=>{App.state.index=i;if(App.state.status[q.id]==='not-visited')App.state.status[q.id]='visited';render();renderPalette();setPalette(false)};c.appendChild(b)})}
 function next(){if(App.state.index===App.questions.length-1){showConfirm();return}App.state.index++;visit();render();renderPalette();save()}function prev(){if(App.state.index>0){App.state.index--;visit();render();renderPalette();save()}}function visit(){let id=App.questions[App.state.index].id;if(App.state.status[id]==='not-visited')App.state.status[id]='visited'}
 $('nextBtn').onclick=next;$('prevBtn').onclick=prev;$('clearBtn').onclick=()=>{const q=App.questions[App.state.index],id=q.id,wasMarked=App.state.status[id]==='marked'||App.state.status[id]==='ansmarked';delete App.state.answers[id];App.state.status[id]=wasMarked?'marked':'not-answered';if(typeof trackerClearQuestion==='function')trackerClearQuestion(q);render();renderPalette();save()};$('markBtn').onclick=()=>{let q=App.questions[App.state.index],id=q.id;App.state.status[id]=App.state.answers[id]?'ansmarked':'marked';if(App.state.index<App.questions.length-1)App.state.index++;visit();render();renderPalette();save()};
@@ -4391,6 +4391,44 @@ document.addEventListener('keydown',e=>{
 });
 
 
+
+/* Formula typography: format only clear chemical formulas in HTML text. Never touch SVG/diagram markup. */
+(function(){
+ const sub={'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
+ const sup={'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','+':'⁺','-':'⁻'};
+ /* Optional leading coefficients remain baseline; counts within the formula become subscripts. */
+ const formulaRe=/(?<![A-Za-z])(?:(\d+)\s*)?((?:[A-Z][a-z]?(?:\d*)?|\([A-Za-z0-9]+\)\d*)+)(?:\^([+-]?\d*[+-]?)|([+-]\d*|\d+[+-]))?(?![A-Za-z])/g;
+ const blocked='script,style,textarea,input,pre,code,sup,sub,svg,math,canvas,iframe,object,embed,.mermaid,.diagram,.diagram-container,[class*="diagram"],[id*="diagram"],[data-no-chem-format],.katex,.MathJax,.mjx-container';
+ function format(root){
+  if(!root||root.nodeType!==1&&root.nodeType!==9&&root.nodeType!==11)return;
+  if(root.nodeType===1&&(root.namespaceURI!=='http://www.w3.org/1999/xhtml'||root.matches('svg,math,canvas,.mermaid,.diagram,.diagram-container,[class*="diagram"],[id*="diagram"],[data-no-chem-format]')))return;
+  const d=root.ownerDocument||root;
+  const walker=d.createTreeWalker(root,4),nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+  nodes.forEach(n=>{
+   const p=n.parentElement,t=n.nodeValue;
+   if(!p||p.namespaceURI!=='http://www.w3.org/1999/xhtml'||p.closest(blocked)||!/[A-Z]/.test(t)||/\$\$|\\\(|\\\)|\\\[|\\\]|\\(?:frac|text|mathrm|rightarrow|times|sqrt|begin|end)\b/.test(t))return;
+   let last=0,m,changed=false;const frag=d.createDocumentFragment();formulaRe.lastIndex=0;
+   while((m=formulaRe.exec(t))){
+    const coefficient=m[1]||'',body=m[2]||'',charge=m[3]||m[4]||'';
+    /* A chemical token must contain a count, grouped atoms, or an explicit charge. */
+    if(!(/[0-9()]/.test(body)||charge))continue;
+    /* Avoid matching a suffix inside a longer word and avoid digit-only pseudo-formulas. */
+    if(!/[A-Z]/.test(body)||(/[A-Za-z]/.test(t[m.index-1]||'')))continue;
+    if(m.index>last)frag.appendChild(d.createTextNode(t.slice(last,m.index)));
+    const span=d.createElement('span');span.className='kaushal-chemical-formula';
+    /* Build nodes rather than parsing generated HTML. This keeps formula formatting
+       isolated from SVG/MathML, avoids HTML parser side effects, and preserves text. */
+    if(coefficient){span.appendChild(d.createTextNode(coefficient));span.appendChild(d.createTextNode(' '));}
+    const bodyText=body.replace(/\d+/g,ds=>Array.from(ds).map(c=>sub[c]||c).join(''));
+    span.appendChild(d.createTextNode(bodyText));
+    if(charge){const supNode=d.createElement('sup');supNode.textContent=Array.from(charge).map(c=>sup[c]||c).join('');span.appendChild(supNode);}
+    frag.appendChild(span);last=m.index+m[0].length;changed=true;
+   }
+   if(changed){if(last<t.length)frag.appendChild(d.createTextNode(t.slice(last)));n.parentNode.replaceChild(frag,n)}
+  });
+ }
+ window.kaushalFormatChemistry=format;
+})();
 /* ---------- SUBJECT-WISE HTML NOTES ---------- */
 const NOTES_KEY='cgpsc_subject_html_notes_v2'; /* FIX: notes UI saves to v2; sync used to read v1, so notes never reached the cloud */
 const NOTES_LEGACY_MAP={'Chhattisgarh General Studies':'General Studies','Hindi':'Language','English':'Language','Chhattisgarhi':'Language','Reasoning & Logical Ability':'Intelligence, Analytical & Logical Ability','Mental Ability':'Intelligence, Analytical & Logical Ability','Mathematics & Statistics':'Intelligence, Analytical & Logical Ability'};
@@ -4415,8 +4453,9 @@ function notesSafePreview(raw){
   box.querySelectorAll('script,iframe,object,embed,form,base,meta,link,style,title').forEach(x=>x.remove());
   box.querySelectorAll('*').forEach(el=>{
     [...el.attributes].forEach(a=>{
-      if(/^on/i.test(a.name)||a.name==='srcdoc')el.removeAttribute(a.name);
-      if((a.name==='href'||a.name==='src')&&/^\s*javascript:/i.test(a.value))el.removeAttribute(a.name);
+      const name=a.name.toLowerCase(),value=String(a.value||'').replace(/[\u0000-\u0020\u00a0\u200b]/g,'').toLowerCase();
+      if(/^on/i.test(name)||name==='srcdoc')el.removeAttribute(a.name);
+      if(['href','src','xlink:href','action','formaction'].includes(name)&&/^(javascript:|vbscript:|data:text\/html)/i.test(value))el.removeAttribute(a.name);
     });
   });
   return box.innerHTML;
@@ -6325,9 +6364,11 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     'html{margin:0;padding:0;max-width:100%;overflow-x:auto;overflow-y:hidden}'+
     'body{margin:0;padding:clamp(12px,2.2vw,26px);max-width:100%;min-width:0;background:#fff;color:#172A2D;font:16px/1.72 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere}'+
     'img,video,canvas{max-width:100%;height:auto}svg{max-width:100%}'+
-    'table{border-collapse:collapse;max-width:100%}'+
+    'table{border-collapse:collapse;max-width:100%;width:auto;margin:1rem 0}'+
     'th,td{border:1px solid #D8E1DE;padding:9px 10px;vertical-align:top;text-align:left}'+
     'th{background:#EEF3F2;font-weight:800}'+
+    'h1,h2,h3,h4{line-height:1.3;margin:1.2em 0 .55em;overflow-wrap:anywhere}h1{font-size:1.8em}h2{font-size:1.45em}h3{font-size:1.2em}p{margin:.65em 0 1em}ul,ol{padding-left:1.5em;margin:.55em 0 1em}li{margin:.28em 0}hr{border:0;border-top:1px solid #D8E1DE;margin:1.4em 0}'+
+    '.kaushal-chemical-formula{white-space:nowrap;font-variant-numeric:lining-nums}.kaushal-chemical-formula sub{font-size:.78em;vertical-align:sub;line-height:0}.kaushal-chemical-formula sup{font-size:.75em;vertical-align:super;line-height:0}'+
     'pre{max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}'+
     'blockquote{margin:1em 0;padding:10px 16px;border-left:4px solid #D9C98B;background:#F7F4EA}'+
     'a{color:#24565A}'+
@@ -6357,17 +6398,22 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     });
     doc.querySelectorAll('style').forEach(st=>{st.textContent=fixCss(st.textContent)});
 
+    /* Format formulas before serializing so saved notes and live previews share the same chemistry typography. */
+    try{if(window.kaushalFormatChemistry)window.kaushalFormatChemistry(doc.body)}catch(e){}
+
     const headExtra=[...(doc.head?doc.head.querySelectorAll('style,link'):[])].map(x=>x.outerHTML).join('');
     if(doc.head)doc.head.querySelectorAll('style,link').forEach(x=>x.remove());
     const ha=attrString(doc.documentElement),ba=attrString(doc.body);
 
     const bridge='<script>(function(){var id='+JSON.stringify(frameId)+';function h(){var d=document,b=d.body,r=d.documentElement;var v=Math.max(r.scrollHeight,b?b.scrollHeight:0);try{var bb=b.getBoundingClientRect();v=Math.max(v,Math.ceil(bb.bottom+(parseFloat(getComputedStyle(b).marginBottom)||0)))}catch(e){}if(r.scrollWidth>r.clientWidth+1)v+=16;parent.postMessage({kaushalNote:id,h:v},"*")}'+
-      'window.addEventListener("load",function(){h();[60,250,700,1500,3000].forEach(function(t){setTimeout(h,t)});try{new ResizeObserver(h).observe(document.documentElement);new ResizeObserver(h).observe(document.body)}catch(e){}});'+
+      'window.addEventListener("load",function(){var done=function(){h();[60,250,700,1500,3000].forEach(function(t){setTimeout(h,t)});try{new ResizeObserver(h).observe(document.documentElement);new ResizeObserver(h).observe(document.body)}catch(e){}};if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise().then(done).catch(done);else done()});'+
       'document.addEventListener("load",h,true);'+
       'document.addEventListener("click",function(ev){var a=ev.target&&ev.target.closest?ev.target.closest("a[href]"):null;if(!a)return;var f=(a.getAttribute("href")||"").trim();ev.preventDefault();if(f.charAt(0)==="#"){var t=null;try{t=document.getElementById(decodeURIComponent(f.slice(1)))}catch(e){}if(t)t.scrollIntoView({behavior:"smooth"})}else if(/^https?:\\/\\//i.test(f)){parent.postMessage({kaushalNote:id,open:f},"*")}});'+
       'h();})();<\/script>';
     return '<!doctype html><html'+(ha?' '+ha:'')+'><head><meta charset="UTF-8">'+
       '<style id="kaushal-note-base">'+BASE_CSS+'</style>'+headExtra+
+      '<script>window.MathJax={tex:{inlineMath:[["\\\\(","\\\\)"],["$","$"]],displayMath:[["$$","$$"],["\\\\[","\\\\]"]]},startup:{typeset:true}};<\/script>'+
+      '<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"><\/script>'+
       '</head><body'+(ba?' '+ba:'')+'>'+doc.body.innerHTML+bridge+'</body></html>';
   }
 
@@ -7385,10 +7431,22 @@ function cleanSVG(raw){
   if(!/<svg[\s>]/i.test(raw))return '';
   let doc;try{doc=new DOMParser().parseFromString(raw,'text/html')}catch(e){return ''}
   const svg=doc.querySelector('svg');if(!svg)return '';
-  svg.querySelectorAll('script,foreignObject,iframe,object,embed,style,animate,set,animateTransform').forEach(n=>n.remove());
+  /* Preserve safe SVG CSS: educational diagrams often style arrows, labels,
+     dashed bonds and fills in a <style> element. */
+  svg.querySelectorAll('script,foreignObject,iframe,object,embed,animate,set,animateTransform').forEach(n=>n.remove());
+  svg.querySelectorAll('style').forEach(st=>{
+    let css=st.textContent||'';
+    css=css.replace(/@import\b[^;]*;?/gi,'')
+           .replace(/expression\s*\([^)]*\)/gi,'')
+           .replace(/url\s*\(\s*(['"]?)\s*(?:javascript:|vbscript:|data:text)[^)]*\)/gi,'none')
+           .replace(/url\s*\(\s*(['"]?)\s*(?:https?:|\/\/)[^)]*\)/gi,'none');
+    if(/javascript:|vbscript:|expression\s*\(/i.test(css))st.remove();
+    else st.textContent=css;
+  });
   [svg,...svg.querySelectorAll('*')].forEach(el=>[...el.attributes].forEach(a=>{
     const v=a.value.replace(/[\u0000-\u0020\u00a0]/g,'').toLowerCase();
     if(/^on/i.test(a.name)||/^(javascript|vbscript|data:text)/.test(v))el.removeAttribute(a.name);
+    else if(/^(?:href|xlink:href)$/i.test(a.name)&&/^(?:https?:|\/\/|javascript:|vbscript:|data:text)/i.test(v))el.removeAttribute(a.name);
   }));
   if(!svg.getAttribute('viewBox')){
     const w=parseFloat(svg.getAttribute('width')),h=parseFloat(svg.getAttribute('height'));
@@ -7414,7 +7472,7 @@ function figureEl(fig,label,extra){
   let ok=false;
   if(label){const l=document.createElement('div');l.className='fig-label';l.textContent=label;d.appendChild(l)}
   const svg=cleanSVG(fig.svg);
-  if(svg){const w=document.createElement('div');w.innerHTML=svg;d.appendChild(w.firstChild);ok=true}
+  if(svg){const w=document.createElement('div');w.className='q-figure-svg-wrap';w.style.maxWidth='100%';w.style.overflow='hidden';w.innerHTML=svg;const node=w.firstChild;if(node){node.style.maxWidth='100%';node.style.height='auto';node.style.display='block';}d.appendChild(w);ok=true}
   else if(isImgSrc(fig.src||fig.image)){const im=document.createElement('img');im.src=(fig.src||fig.image).trim();im.alt=alt;d.appendChild(im);ok=true}
   if(ok){
     if(alt){const c=document.createElement('div');c.className='fig-alt';c.textContent=alt;c.hidden=true;d.appendChild(c)}
