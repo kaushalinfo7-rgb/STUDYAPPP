@@ -7243,7 +7243,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     {type:'mcq',question:'Second question goes here?',options:{A:'Option one',B:'Option two',C:'Option three',D:'Option four'},answer:'C',explanation:'Short explanation.'}
   ];
   const sampleText=()=>JSON.stringify(SAMPLE,null,2);
-  const promptText=()=>'Create '+QUIZ_N+' exam-quality multiple-choice questions on the topic "'+cur.topic+'" ('+cur.subject+' › '+cur.group+') for the CGPSC Prelims. Return ONLY a valid JSON array with no extra text. Each item must look exactly like: {"type":"mcq","question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"..."}. Exactly one correct option per question, plausible distractors, mix easy and difficult questions.';
+  const promptText=()=>'Create 25 exam-quality multiple-choice (involving normal mcqs, assertion reason and multiple statement questions meeting standards of state PSCs preparation) questions on the topic "'+cur.topic+'" for the CGPSC Prelims. Return ONLY a valid JSON array with no extra text. Each item must look exactly like: {"type":"mcq","question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"..."}. Exactly one correct option per question, plausible distractors, mix easy and difficult questions.';
   function copy(text,btn){
     const done=()=>{if(!btn)return;const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1400)};
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(done,()=>{say('Copy failed — select the text manually.')});
