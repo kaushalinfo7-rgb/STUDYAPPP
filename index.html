@@ -3754,7 +3754,8 @@ function cloudEndpoint(){return CLOUD_CONFIG.url.replace(/\/$/,'')+'/rest/v1/'+e
 function getTrackerSnapshot(){try{return JSON.parse(localStorage.getItem(TRACKER_KEY)||'{"days":{}}')}catch(e){return {days:{}}}}
 function getFlashcardReviews(){try{return JSON.parse(localStorage.getItem('cgpsc_flashcard_reviews_v1')||'{}')}catch(e){return {}}}
 function buildCloudPayload(){return {version:3,updatedAt:new Date().toISOString(),questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining,tracker:getTrackerSnapshot(),revision:revisionMerge(App.revision,revisionLoad()),plan:planLoad(),flashcardReviews:getFlashcardReviews(),theme:localStorage.getItem('cgpsc_theme')||'day'}}
-function writeLocalSnapshot(payload){try{localStorage.setItem(CLOUD_LOCAL_KEY,JSON.stringify(payload))}catch(e){}}
+/* FIX: the full cloud payload used to be duplicated here (questions, revision, plan, tracker...). Supabase already holds it, so only a tiny timestamp stub is kept locally for sync comparison. */
+function writeLocalSnapshot(payload){try{const stub=JSON.stringify({updatedAt:(payload&&payload.updatedAt)||new Date().toISOString()});try{localStorage.removeItem(CLOUD_LOCAL_KEY)}catch(_){}localStorage.setItem(CLOUD_LOCAL_KEY,stub)}catch(e){}}
 function readLocalSnapshot(){try{return JSON.parse(localStorage.getItem(CLOUD_LOCAL_KEY)||'null')}catch(e){return null}}
 async function cloudSaveNow(){
   if(!cloudEnabled())return;
@@ -3795,15 +3796,19 @@ async function cloudPullLatest(){
   if(!cloudEnabled()||cloudPullBusy||document.visibilityState==='hidden')return;
   cloudPullBusy=true;
   try{
+    const r0=await fetch(cloudEndpoint()+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&select=updated_at',{headers:cloudHeaders(),cache:'no-store'});
+    if(!r0.ok)throw new Error('Cloud refresh failed ('+r0.status+')');
+    const rows0=await r0.json();
+    const remoteAt=Date.parse(rows0?.[0]?.updated_at||0);
+    const local=readLocalSnapshot(),localAt=Date.parse(local?.updatedAt||0);
+    if(!remoteAt || remoteAt<=localAt)return;
     const r=await fetch(cloudEndpoint()+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&select=payload,updated_at',{headers:cloudHeaders(),cache:'no-store'});
     if(!r.ok)throw new Error('Cloud refresh failed ('+r.status+')');
     const rows=await r.json(),remote=rows?.[0]?.payload||null;
     if(!remote)return;
-    const remoteAt=Date.parse(remote.updatedAt||rows?.[0]?.updated_at||0);
-    const local=readLocalSnapshot(),localAt=Date.parse(local?.updatedAt||0);
-    if(!remoteAt || remoteAt<=localAt)return;
-    if(applySnapshot(remote)){
-      writeLocalSnapshot(remote);
+    const applied=applySnapshot(remote);
+    writeLocalSnapshot(remote); /* record the timestamp even when no exam is in progress, so we don't re-download every 5s */
+    if(applied){
       revisionRenderHome();revisionRenderScreen();trackerRender();
       if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard();
       if(!$('planScreen').classList.contains('hidden'))planRender();
@@ -3836,7 +3841,7 @@ function applySnapshot(saved){
 }
 function save(){
   const payload=buildCloudPayload();
-  try{localStorage.setItem('cgpsc_mock_v2',JSON.stringify({questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining,revision:App.revision,plan:planLoad()}));writeLocalSnapshot(payload)}catch(e){console.warn('Progress could not be saved:',e)}
+  try{localStorage.setItem('cgpsc_mock_v2',JSON.stringify({questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining}));writeLocalSnapshot(payload)}catch(e){console.warn('Progress could not be saved:',e)}
   queueCloudSave();
 }
 async function restoreSavedExam(){
@@ -5357,7 +5362,12 @@ function rebind(id,fn){const b=$(id);if(!b)return;const n=b.cloneNode(true);b.re
 const guardExam=async()=>(App.state.started&&Object.keys(App.state.answers||{}).length&&$('exam').classList.contains('hidden'))?uiDialog('A saved exam is in progress. Starting a new one will replace it. Continue?',{ok:'Replace'}):true;
 
 /* ---------- storage quota warning ---------- */
-S(()=>{const si=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){try{return si.call(this,k,v)}catch(e){toast('⚠ Device storage is full — export a backup from Study Hub and clear old data.');throw e}}});
+S(()=>{const si=Storage.prototype.setItem;let lastWarn=0;Storage.prototype.setItem=function(k,v){try{return si.call(this,k,v)}catch(e){
+  const quota=!!e&&(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22||e.code===1014);
+  /* auto-recover: drop the legacy oversized cloud snapshot copy (re-creatable from Supabase) and retry once */
+  if(quota&&this===window.localStorage&&k!=='cgpsc_cloud_snapshot_v1'){try{const old=this.getItem('cgpsc_cloud_snapshot_v1');if(old&&old.length>2000){this.removeItem('cgpsc_cloud_snapshot_v1');return si.call(this,k,v)}}catch(_){}}
+  if(quota&&Date.now()-lastWarn>5000){lastWarn=Date.now();toast('⚠ Device storage is full — export a backup from Study Hub and clear old data.')}
+  throw e}}});
 
 /* ---------- viewport / forms / fullscreen ---------- */
 S(()=>{document.querySelector('meta[name=viewport]').content='width=device-width, initial-scale=1.0, viewport-fit=cover'});
