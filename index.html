@@ -4466,7 +4466,12 @@ function stFmt(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600
 function stPaintClock(){const e=$('stClock');if(!e)return;const s=Math.floor(stElapsed()/1000),p=n=>String(n).padStart(2,'0');e.textContent=p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60);if($('stSave'))$('stSave').disabled=s<10}
 function stMsg(t){const e=$('stMsg');e.textContent=t;clearTimeout(stMsgT);stMsgT=setTimeout(()=>e.textContent='',2600)}
 function stAdd(o){const d=stLoad();const cat=o.cat!==undefined?String(o.cat||'General'):($('stCat')?.value||'General');const topic=o.topic!==undefined?String(o.topic||''):($('stTopic')?.value.trim()||'');d.sessions.push({id:'s_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:o.date||trackerDate(new Date()),secs:Math.max(0,Math.floor(o.secs||0)),cat,topic,at:new Date().toISOString(),src:o.src||'timer'});stSave(d);return d.sessions[d.sessions.length-1]}
-window.kaushalLogStudyTime=function(secs,o={}){secs=Math.floor(Number(secs)||0);if(secs<1)return null;return stAdd({secs,date:o.date||trackerDate(new Date()),cat:o.cat||'General',topic:o.topic||'',src:o.src||'notes'})};
+/* Notes time is logged only after a note has been open for at least 2 minutes (120s).
+   Shorter focus segments are held in memory per note and logged once the total reaches 2 minutes. */
+const NOTE_MIN_LOG_SECS=120,notePendingSecs={};
+window.kaushalLogStudyTime=function(secs,o={}){secs=Math.floor(Number(secs)||0);if(secs<1)return null;
+if(o.src==='notes-focus'){const k=(o.cat||'')+'|'+(o.topic||'');const total=(notePendingSecs[k]||0)+secs;if(total<NOTE_MIN_LOG_SECS){notePendingSecs[k]=total;return null}delete notePendingSecs[k];secs=total}
+return stAdd({secs,date:o.date||trackerDate(new Date()),cat:o.cat||'General',topic:o.topic||'',src:o.src||'notes'})};
 function stDelete(id){const d=stLoad();d.sessions=d.sessions.filter(s=>s.id!==id);d.del[id]=new Date().toISOString();stSave(d);stRender()}
 function stInit(){
  if(stInited)return;stInited=true;
