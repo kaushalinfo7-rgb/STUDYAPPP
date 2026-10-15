@@ -3039,6 +3039,17 @@ body.theme-dark #start .study-nav-actions > button.nav-tile:focus-visible{outlin
 }
 
 
+
+/* Collapsible: Add questions to your Study Hub */
+#start .bank-import-head{flex-wrap:nowrap}
+.bank-collapse-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:99px;border:1px solid #c8d4d3;background:#fffefa;color:#155761;font-size:11px;font-weight:850;cursor:pointer;min-height:0}
+.bank-collapse-btn:hover{background:#eef5f3}
+.bank-collapse-chev{display:inline-block;font-size:14px;line-height:1;transition:transform .2s ease}
+.bank-import-card.bank-collapsed .bank-collapse-chev{transform:rotate(180deg)}
+.bank-import-card.bank-collapsed #bankImportBody{display:none!important}
+#start .bank-import-card.bank-collapsed .bank-import-head{margin-bottom:0!important}
+body.theme-dark .bank-collapse-btn{background:transparent;color:inherit;border-color:#ffffff40}
+@media(max-width:650px){#start .bank-import-head{flex-wrap:wrap}.bank-collapse-btn{margin-left:0}}
 </style>
 <style id="front-page-text-cleanup">
 /* Remove non-essential instructional/status copy from the bottom of the home screen.
@@ -3211,10 +3222,10 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
     <article><span class="cc-icon">◎</span><small>Topics mastered</small><strong id="ccMasteredCount">0</strong><em>Marked by you</em></article>
     <article><span class="cc-icon">◷</span><small>Study momentum</small><strong id="ccStudyMinutes">0m</strong><em>Logged today</em></article>
   </div>
-  <div class="cc-actions"><button type="button" data-cc-open="notes">▤ <span>Open Smart Notes</span><b>→</b></button><button type="button" data-cc-open="revision">↻ <span>Review mistakes</span><b>→</b></button><button type="button" data-cc-open="plan">✓ <span>Today's plan</span><b>→</b></button><button type="button" data-cc-open="hub">✦ <span>Practice questions</span><b>→</b></button></div>
   <div class="cc-footer"><span><i></i> Notes, revision and progress are connected</span><span>CGPSC · CONSISTENCY OVER CRAMMING</span></div>
 </section>
-<div class="bank-import-head"><div><span class="bank-kicker">QUESTION BANK BUILDER</span><h2>Add questions to your Study Hub</h2><p>Select the subject first, then paste JSON or choose a JSON file. New questions are added to that subject's existing bank.</p></div><div class="bank-cloud-pill">☁ Auto-synced</div></div>
+<div class="bank-import-head"><div><span class="bank-kicker">QUESTION BANK BUILDER</span><h2>Add questions to your Study Hub</h2><p>Select the subject first, then paste JSON or choose a JSON file. New questions are added to that subject's existing bank.</p></div><div class="bank-cloud-pill">☁ Auto-synced</div><button type="button" class="bank-collapse-btn" id="bankCollapseBtn" aria-expanded="true" aria-controls="bankImportBody" title="Collapse / expand"><span class="bank-collapse-label">Hide</span><span class="bank-collapse-chev" aria-hidden="true">⌃</span></button></div>
+<div id="bankImportBody">
 <div class="bank-import-row">
 <label class="bank-field"><span>Subject</span><select id="bankSubjectSelect"></select></label>
 <label class="bank-file-label"><span>JSON file</span><input accept=".json,application/json" id="bankFileInput" type="file"/><small>Optional — imports directly into the selected subject</small></label>
@@ -3224,6 +3235,7 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 <div class="error" id="error"></div>
 <div class="helper"><b>Supported types:</b> <code>mcq</code> · <code>multiple_statement</code> · <code>assertion_reason</code> · <code>match_following</code>. Old JSON using <code>question + options + answer</code> is also accepted automatically.</div>
 <div class="bank-import-summary" id="bankImportSummary"></div>
+</div>
 </section>
 <div class="helper cloud-status-hidden" id="cloudSyncStatus"><b>Cloud sync:</b> <span id="cloudSyncText">Automatic sync active</span></div>
 <div class="hidden" id="examInfo" style="margin-top:25px"><div class="helper"><b id="infoText"></b><br/>Timer and marking settings can be changed below before starting.</div><div class="actions"><button class="btn outline" id="fullscreenBtn">Enter Fullscreen</button><button class="btn primary" id="startBtn">START EXAM</button></div></div>
@@ -7892,13 +7904,16 @@ const meta=()=>read(META_KEY,{});
 const saveMeta=m=>write(META_KEY,m);
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const datePlus=days=>{const d=new Date();d.setDate(d.getDate()+days);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const STT_KEY_CC='cgpsc_study_time_v1';
+const todayStudySecs=()=>{try{const raw=(typeof window.storageGet==='function'?window.storageGet(STT_KEY_CC,''):localStorage.getItem(STT_KEY_CC))||'{}';const x=JSON.parse(raw)||{},del=x.del||{},t=today();return (Array.isArray(x.sessions)?x.sessions:[]).reduce((a,s)=>a+((s&&s.date===t&&!del[s.id])?(Number(s.secs)||0):0),0)}catch(e){return 0}};
+const fmtMins=secs=>{const m=Math.floor(secs/60);if(m>=60)return Math.floor(m/60)+'h '+(m%60)+'m';if(m>0)return m+'m';return secs>0?'<1m':'0m'};
 const due=n=>{const m=meta()[String(n.id)]||{};return m.status==='revision'||!!m.nextReview&&m.nextReview<=today()};
 function safe(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function openNote(n){try{write('kaushal_smart_last_note_v1',String(n.id));if(typeof window.notesOpenReader==='function')window.notesOpenReader(n.id);else if(typeof window.notesOpenSavedNote==='function')window.notesOpenSavedNote(n.id);else if(typeof window.openSavedNote==='function')window.openSavedNote(n.id);else if(typeof window.notesOpen==='function'){window.notesOpen();setTimeout(()=>{const b=document.querySelector('[data-open-note-v2="'+CSS.escape(String(n.id))+'"]');b?.click()},150)}}catch(e){}}
 let filter='all';
 function render(){
  const notes=allNotes(),m=meta(),q=($('snSearch')?.value||'').toLowerCase().trim(),dueNotes=notes.filter(due),mastered=notes.filter(n=>(m[String(n.id)]||{}).status==='mastered');
- if($('ccNotesCount'))$('ccNotesCount').textContent=notes.length;if($('ccDueCount'))$('ccDueCount').textContent=dueNotes.length;if($('ccMasteredCount'))$('ccMasteredCount').textContent=mastered.length;if($('snAllCount'))$('snAllCount').textContent=notes.length;if($('snDueBadge'))$('snDueBadge').textContent=dueNotes.length;
+ if($('ccNotesCount'))$('ccNotesCount').textContent=notes.length;if($('ccDueCount'))$('ccDueCount').textContent=dueNotes.length;if($('ccMasteredCount'))$('ccMasteredCount').textContent=mastered.length;if($('ccStudyMinutes'))$('ccStudyMinutes').textContent=fmtMins(todayStudySecs());if($('snAllCount'))$('snAllCount').textContent=notes.length;if($('snDueBadge'))$('snDueBadge').textContent=dueNotes.length;
  if($('ccTodayLabel'))$('ccTodayLabel').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}).toUpperCase();
  const filtered=notes.filter(n=>{const mm=m[String(n.id)]||{},st=mm.status||'not-started';return (filter==='all'||(filter==='revision'?due(n):st===filter))&&(!q||(String(n.title||'').toLowerCase()+' '+n.subject.toLowerCase()+' '+String(n.topic||'').toLowerCase()).includes(q))}).slice(0,12);
  const list=$('snNotesList');if(!list)return;
@@ -7922,11 +7937,29 @@ function openPersonal(id){const n=allNotes().find(x=>String(x.id)===String(id));
 $('snSearch')?.addEventListener('input',render);
 $('snResumeBtn')?.addEventListener('click',()=>{const id=read('kaushal_smart_last_note_v1',''),notes=allNotes(),n=notes.find(x=>String(x.id)===String(id))||notes.find(x=>(meta()[String(x.id)]||{}).status==='reading')||notes[0];if(n)openNote(n);else alert('Save a note first, then you can resume it here.')});
 window.kaushalSmartNotesRender=render;
+(function(){const paintMinutes=()=>{const e=$('ccStudyMinutes');if(e)e.textContent=fmtMins(todayStudySecs())};const wrap=()=>{const f=window.kaushalLogStudyTime;if(typeof f==='function'&&!f.__ccWrapped){const w=function(){const r=f.apply(this,arguments);try{paintMinutes()}catch(e){}return r};w.__ccWrapped=true;window.kaushalLogStudyTime=w}};wrap();document.addEventListener('DOMContentLoaded',wrap);
+setInterval(()=>{try{paintMinutes()}catch(e){}},5000);})();
 document.addEventListener('DOMContentLoaded',render);
 window.addEventListener('storage',e=>{if(e.key===NOTES_KEY||e.key===META_KEY)render()});
 setInterval(()=>{if(!$('start')?.classList.contains('hidden')||!$('notesScreen')?.classList.contains('hidden'))render()},15000);
 })();
 
+</script>
+<script id="bank-import-collapse">
+(function(){
+  var KEY='kaushal_bank_import_collapsed_v1';
+  function init(){
+    var btn=document.getElementById('bankCollapseBtn');
+    var card=btn&&btn.closest('.bank-import-card');
+    if(!btn||!card)return;
+    var label=btn.querySelector('.bank-collapse-label');
+    function apply(c){card.classList.toggle('bank-collapsed',c);btn.setAttribute('aria-expanded',String(!c));if(label)label.textContent=c?'Show':'Hide'}
+    var saved=false;try{saved=localStorage.getItem(KEY)==='1'}catch(e){}
+    apply(saved);
+    btn.addEventListener('click',function(){var c=!card.classList.contains('bank-collapsed');apply(c);try{localStorage.setItem(KEY,c?'1':'0')}catch(e){}});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
 </script>
 </body>
 </html>
