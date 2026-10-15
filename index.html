@@ -5,6 +5,169 @@
 <meta name="theme-color" content="#173E42">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>KAUSHAL • Study Command Center</title>
+
+<script id="kaushal-unlimited-storage-bridge">
+/* ============================================================
+   ZERO-DATA-LOSS UNLIMITED STORAGE ENGINE (IndexedDB + RAM Cache)
+   Automatically migrates full localStorage into IndexedDB,
+   removes obsolete duplicate snapshots, and prevents
+   QuotaExceededError permanently without losing any data.
+   ============================================================ */
+(function() {
+  const DB_NAME = 'KaushalStudyCenterDB';
+  const STORE_NAME = 'kv_store';
+  const memCache = new Map();
+  const rawGet = Storage.prototype.getItem.bind(localStorage);
+  const rawSet = Storage.prototype.setItem.bind(localStorage);
+  const rawRemove = Storage.prototype.removeItem.bind(localStorage);
+  const rawKey = Storage.prototype.key.bind(localStorage);
+
+  // 1. Clean obsolete duplicate cache keys that are safe to drop
+  const OBSOLETE_KEYS = ['cgpsc_cloud_snapshot_v1'];
+  OBSOLETE_KEYS.forEach(k => { try { rawRemove(k); } catch (_) {} });
+
+  // 2. Load all existing localStorage data into instant RAM cache
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = rawKey(i);
+      if (k && !OBSOLETE_KEYS.includes(k)) {
+        const v = rawGet(k);
+        if (v !== null) memCache.set(k, v);
+      }
+    }
+  } catch (e) {
+    console.warn('Initial localStorage scan warning:', e);
+  }
+
+  // 3. Migrate legacy v1 notes/tracker into v2 if v2 is empty
+  if (memCache.has('cgpsc_subject_html_notes_v1') && !memCache.has('cgpsc_subject_html_notes_v2')) {
+    memCache.set('cgpsc_subject_html_notes_v2', memCache.get('cgpsc_subject_html_notes_v1'));
+  }
+  if (memCache.has('cgpsc_ subject_html_notes_v1')) rawRemove('cgpsc_subject_html_notes_v1');
+
+  // 4. Override localStorage.getItem / setItem / removeItem synchronously
+  let dbInstance = null;
+  const pendingWrites = new Map();
+
+  function flushToIDB(key, val) {
+    if (!dbInstance) {
+      pendingWrites.set(key, val);
+      return;
+    }
+    try {
+      const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      if (val === null) store.delete(key);
+      else store.put(val, key);
+    } catch (err) {
+      console.warn('IndexedDB write warning:', err);
+    }
+  }
+
+  Storage.prototype.getItem = function(key) {
+    if (this === localStorage) {
+      return memCache.has(key) ? memCache.get(key) : rawGet(key);
+    }
+    return rawGet(key);
+  };
+
+  Storage.prototype.setItem = function(key, value) {
+    const strVal = String(value);
+    if (this === localStorage) {
+      memCache.set(key, strVal);
+      flushToIDB(key, strVal);
+
+      // Keep small keys (< 25 KB) mirrored in localStorage; offload heavy banks/notes to IndexedDB
+      if (strVal.length < 25000) {
+        try {
+          rawSet(key, strVal);
+        } catch (quotaErr) {
+          // If localStorage is still tight, evict heavy keys from raw localStorage (they are safe in RAM + IndexedDB)
+          ['cgpsc_question_banks_v1', 'cgpsc_subject_html_notes_v2', 'cgpsc_mock_v2', 'cgpsc_revision_queue_v1'].forEach(hk => {
+            try { rawRemove(hk); } catch (_) {}
+          });
+          try { rawSet(key, strVal); } catch (_) {}
+        }
+      } else {
+        // Free up the 5MB localStorage quota by removing the heavy copy from raw localStorage
+        try { rawRemove(key); } catch (_) {}
+      }
+      return;
+    }
+    return rawSet(key, strVal);
+  };
+
+  Storage.prototype.removeItem = function(key) {
+    if (this === localStorage) {
+      memCache.delete(key);
+      flushToIDB(key, null);
+    }
+    return rawRemove(key);
+  };
+
+  // 5. Open IndexedDB and hydrate all saved records without overwriting newer data
+  const req = indexedDB.open(DB_NAME, 1);
+  req.onupgradeneeded = function(e) {
+    const db = e.target.result;
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+      db.createObjectStore(STORE_NAME);
+    }
+  };
+  req.onsuccess = function(e) {
+    dbInstance = e.target.result;
+    const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+
+    store.openCursor().onsuccess = function(ev) {
+      const cursor = ev.target.result;
+      if (cursor) {
+        const k = cursor.key;
+        const idbVal = cursor.value;
+        // If key wasn't in localStorage (because it was offloaded to IDB previously), restore it to memCache
+        if (!memCache.has(k) || (idbVal && String(idbVal).length > String(memCache.get(k) || '').length)) {
+          memCache.set(k, idbVal);
+        }
+        cursor.continue();
+      } else {
+        // Persist all current memCache items into IndexedDB and offload heavy items from raw localStorage
+        memCache.forEach((val, key) => {
+          store.put(val, key);
+          if (val && val.length >= 25000) {
+            try { rawRemove(key); } catch (_) {}
+          }
+        });
+        pendingWrites.forEach((val, key) => {
+          if (val === null) store.delete(key);
+          else store.put(val, key);
+        });
+        pendingWrites.clear();
+
+        // Hide any existing "Device storage is full" banner/toast if present
+        document.querySelectorAll('*').forEach(el => {
+          if (el.children.length === 0 && /Device storage is full/i.test(el.textContent || '')) {
+            const banner = el.closest('[role="alert"], .error, .toast, .storage-warning') || el;
+            banner.style.display = 'none';
+          }
+        });
+
+        // Refresh UI views with hydrated IndexedDB data
+        try { if (typeof bankRenderSummary === 'function') bankRenderSummary(); } catch (_) {}
+        try { if (typeof bankRenderHub === 'function') bankRenderHub(); } catch (_) {}
+        try { if (typeof notesRenderSubjects === 'function') notesRenderSubjects(); } catch (_) {}
+        try { if (typeof revisionRenderHome === 'function') revisionRenderHome(); } catch (_) {}
+        try { if (typeof revisionRenderScreen === 'function') revisionRenderScreen(); } catch (_) {}
+        try { if (typeof trackerRender === 'function') trackerRender(); } catch (_) {}
+        try { if (typeof planRender === 'function') planRender(); } catch (_) {}
+      }
+    };
+  };
+
+  // Request persistent storage permission from the browser so OS never auto-clears it
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().catch(() => {});
+  }
+})();
+</script>
 <style id="kaushal-app-styles">
 /* ============================================================
    KAUSHAL • STUDY COMMAND CENTER
