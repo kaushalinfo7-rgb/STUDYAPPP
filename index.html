@@ -24,6 +24,20 @@
 
   // 1. Clean obsolete duplicate cache keys that are safe to drop
   const OBSOLETE_KEYS = ['cgpsc_cloud_snapshot_v1'];
+
+  // Study-time log must (a) always stay in real localStorage so it is readable synchronously on boot,
+  // and (b) be MERGED (not "longest string wins") when IndexedDB and localStorage disagree.
+  const STUDY_KEY = 'cgpsc_study_time_v1';
+  function mergeStudy(a, b) {
+    try {
+      const x = JSON.parse(a || '{}') || {}, y = JSON.parse(b || '{}') || {};
+      const del = Object.assign({}, x.del || {}, y.del || {}), m = new Map();
+      [].concat(x.sessions || [], y.sessions || []).forEach(s => { if (s && s.id && !del[s.id]) m.set(s.id, s); });
+      return JSON.stringify({ sessions: [...m.values()], del });
+    } catch (_) {
+      return String(a || '').length >= String(b || '').length ? a : b;
+    }
+  }
   OBSOLETE_KEYS.forEach(k => { try { rawRemove(k); } catch (_) {} });
 
   // 2. Load all existing localStorage data into instant RAM cache
@@ -78,7 +92,7 @@
       flushToIDB(key, strVal);
 
       // Keep small keys (< 25 KB) mirrored in localStorage; offload heavy banks/notes to IndexedDB
-      if (strVal.length < 25000) {
+      if (strVal.length < 25000 || key === STUDY_KEY) {
         try {
           rawSet(key, strVal);
         } catch (quotaErr) {
@@ -124,7 +138,14 @@
         const k = cursor.key;
         const idbVal = cursor.value;
         // If key wasn't in localStorage (because it was offloaded to IDB previously), restore it to memCache
-        if (!memCache.has(k) || (idbVal && String(idbVal).length > String(memCache.get(k) || '').length)) {
+        if (k === STUDY_KEY) {
+          if (!memCache.has(k)) memCache.set(k, idbVal);
+          else {
+            const merged = mergeStudy(memCache.get(k), idbVal);
+            memCache.set(k, merged);
+            try { rawSet(k, merged); } catch (_) {}
+          }
+        } else if (!memCache.has(k) || (idbVal && String(idbVal).length > String(memCache.get(k) || '').length)) {
           memCache.set(k, idbVal);
         }
         cursor.continue();
@@ -132,7 +153,7 @@
         // Persist all current memCache items into IndexedDB and offload heavy items from raw localStorage
         memCache.forEach((val, key) => {
           store.put(val, key);
-          if (val && val.length >= 25000) {
+          if (val && val.length >= 25000 && key !== STUDY_KEY) {
             try { rawRemove(key); } catch (_) {}
           }
         });
@@ -4470,20 +4491,24 @@ function planRender(){
 const STT_KEY='cgpsc_study_time_v1',STT_TIMER='cgpsc_study_timer_v1';
 function stLoad(){try{const x=JSON.parse(storageGet(STT_KEY,'')||'{}');return{sessions:Array.isArray(x.sessions)?x.sessions:[],del:x.del&&typeof x.del==='object'?x.del:{}}}catch(e){return{sessions:[],del:{}}}}
 function stSave(d){storageSet(STT_KEY,JSON.stringify(d));queueCloudSave()}
-function stMerge(a,b){a=a||{};b=b||{};const del={...(a.del||{}),...(b.del||{})},m=new Map();[...(a.sessions||[]),...(b.sessions||[])].forEach(s=>{if(s&&s.id&&!del[s.id])m.set(s.id,s)});return{sessions:[...m.values()],del}}
+function stMerge(a,b){a=a||{};b=b||{};const del={...(a.del||{}),...(b.del||{})},m=new Map();[...(a.sessions||[]),...(b.sessions||[])].forEach(s=>{if(s&&s.id&&!del[s.id]){const o=m.get(s.id);if(!o||(Number(s.secs)||0)>=(Number(o.secs)||0))m.set(s.id,s)}});return{sessions:[...m.values()],del}}
 let stT={run:false,since:0,acc:0},stInited=false,stTick=null,stMsgT=null;
 const stTSave=()=>storageSet(STT_TIMER,JSON.stringify(stT));
 const stElapsed=()=>stT.acc+(stT.run?Date.now()-stT.since:0);
 function stFmt(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+'h '+m+'m':m?m+'m':s+'s'}
 function stPaintClock(){const e=$('stClock');if(!e)return;const s=Math.floor(stElapsed()/1000),p=n=>String(n).padStart(2,'0');e.textContent=p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60);if($('stSave'))$('stSave').disabled=s<10}
 function stMsg(t){const e=$('stMsg');e.textContent=t;clearTimeout(stMsgT);stMsgT=setTimeout(()=>e.textContent='',2600)}
-function stAdd(o){const d=stLoad();const cat=o.cat!==undefined?String(o.cat||'General'):($('stCat')?.value||'General');const topic=o.topic!==undefined?String(o.topic||''):($('stTopic')?.value.trim()||'');d.sessions.push({id:'s_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:o.date||trackerDate(new Date()),secs:Math.max(0,Math.floor(o.secs||0)),cat,topic,at:new Date().toISOString(),src:o.src||'timer'});stSave(d);return d.sessions[d.sessions.length-1]}
+function stAdd(o){const d=stLoad();const cat=o.cat!==undefined?String(o.cat||'General'):($('stCat')?.value||'General');const topic=o.topic!==undefined?String(o.topic||''):($('stTopic')?.value.trim()||'');d.sessions.push({id:'s_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:o.date||trackerDate(new Date()),secs:Math.max(0,Math.floor(o.secs||0)),cat,topic,at:new Date().toISOString(),src:o.src||'timer',...(o.nid?{nid:String(o.nid)}:{})});stSave(d);return d.sessions[d.sessions.length-1]}
 /* Notes time is logged only after a note has been open for at least 2 minutes (120s).
    Shorter focus segments are held in memory per note and logged once the total reaches 2 minutes. */
-const NOTE_MIN_LOG_SECS=120,notePendingSecs={};
+const NOTE_MIN_LOG_SECS=120,NOTE_PEND_KEY='kaushal_note_focus_pending_v1';
+let notePendingSecs={};try{notePendingSecs=JSON.parse(storageGet(NOTE_PEND_KEY,'')||'{}')||{}}catch(e){notePendingSecs={}}
+const notePendSave=()=>{try{storageSet(NOTE_PEND_KEY,JSON.stringify(notePendingSecs))}catch(e){}};
 window.kaushalLogStudyTime=function(secs,o={}){secs=Math.floor(Number(secs)||0);if(secs<1)return null;
-if(o.src==='notes-focus'){const k=(o.cat||'')+'|'+(o.topic||'');const total=(notePendingSecs[k]||0)+secs;if(total<NOTE_MIN_LOG_SECS){notePendingSecs[k]=total;return null}delete notePendingSecs[k];secs=total}
-return stAdd({secs,date:o.date||trackerDate(new Date()),cat:o.cat||'General',topic:o.topic||'',src:o.src||'notes'})};
+if(o.src==='notes-focus'){const k=(o.cat||'')+'|'+(o.topic||'');const total=(notePendingSecs[k]||0)+secs;if(total<NOTE_MIN_LOG_SECS){notePendingSecs[k]=total;notePendSave();return null}delete notePendingSecs[k];notePendSave();secs=total}
+if((o.src||'notes')==='notes'&&o.nid){const d=stLoad(),dt=o.date||trackerDate(new Date()),ex=d.sessions.find(x=>x.src==='notes'&&x.nid===String(o.nid)&&x.date===dt);
+ if(ex){ex.secs=(Number(ex.secs)||0)+secs;ex.at=new Date().toISOString();stSave(d);return ex}}
+return stAdd({secs,date:o.date||trackerDate(new Date()),cat:o.cat||'General',topic:o.topic||'',src:o.src||'notes',nid:o.nid})};
 function stDelete(id){const d=stLoad();d.sessions=d.sessions.filter(s=>s.id!==id);d.del[id]=new Date().toISOString();stSave(d);stRender()}
 function stInit(){
  if(stInited)return;stInited=true;
@@ -7876,17 +7901,22 @@ try{if(typeof App!=="undefined"&&App.questions&&App.questions.length&&typeof win
   function readerVisible(){const e=$('noteReaderScreen');return !!e&&!e.classList.contains('hidden')&&document.visibilityState!=='hidden'&&!!window._currentOpenNoteId}
   function getMeta(){return {id:String(window._currentOpenNoteId||''),title:(($('noteReaderTitle')||{}).textContent||'Saved note').trim(),subject:(($('noteReaderSubject')||{}).textContent||'Notes').split(' · ')[0].trim()||'Notes'}}
   function accrue(now){if(segmentStart){accruedMs+=Math.max(0,now-segmentStart);segmentStart=now}}
-  function logSeconds(seconds){if(seconds<1||typeof window.kaushalLogStudyTime!=='function')return;window.kaushalLogStudyTime(seconds,{cat:activeSubject||'Notes',topic:activeTitle||'Saved note',src:'notes'});try{if($('planScreen')&&!$('planScreen').classList.contains('hidden')&&typeof window.planRender==='function')window.planRender()}catch(e){}try{if($('progressScreen')&&!$('progressScreen').classList.contains('hidden')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}}
-  function finish(){if(!activeId)return;accrue(Date.now());const secs=Math.floor(accruedMs/1000);if(qualified&&secs>0)logSeconds(secs);activeId='';segmentStart=0;accruedMs=0;qualified=false;activeTitle='';activeSubject=''}
+  function logSeconds(seconds){if(seconds<1||typeof window.kaushalLogStudyTime!=='function')return;window.kaushalLogStudyTime(seconds,{cat:activeSubject||'Notes',topic:activeTitle||'Saved note',src:'notes',nid:activeId});try{if($('planScreen')&&!$('planScreen').classList.contains('hidden')&&typeof window.planRender==='function')window.planRender()}catch(e){}try{if($('progressScreen')&&!$('progressScreen').classList.contains('hidden')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}}
+  const PEND_KEY='kaushal_note_read_pending_v1';
+  function pendLoad(){try{return JSON.parse(localStorage.getItem(PEND_KEY)||'{}')||{}}catch(e){return {}}}
+  function pendSave(p){try{localStorage.setItem(PEND_KEY,JSON.stringify(p))}catch(e){}}
+  function pendTake(id){const p=pendLoad(),e=p[id];if(!e)return 0;delete p[id];pendSave(p);return (Date.now()-(e.t||0)<864e5)?Math.max(0,Number(e.ms)||0):0}
+  function pendPut(id,ms){if(!id||ms<1000)return;const p=pendLoad();p[id]={ms:Math.min(ms,MIN_READ_SECONDS*1000-1),t:Date.now()};pendSave(p)}
+  function finish(){if(!activeId)return;accrue(Date.now());const secs=Math.floor(accruedMs/1000);if(qualified){if(secs>0)logSeconds(secs)}else pendPut(activeId,accruedMs);activeId='';segmentStart=0;accruedMs=0;qualified=false;activeTitle='';activeSubject=''}
   function tick(){const visible=readerVisible(),meta=visible?getMeta():null,now=Date.now();
     if(activeId&&(!visible||!meta||meta.id!==activeId)){finish()}
-    if(visible&&meta&&meta.id){if(!activeId){activeId=meta.id;activeTitle=meta.title;activeSubject=meta.subject;accruedMs=0;qualified=false;segmentStart=now}else{accrue(now)}
+    if(visible&&meta&&meta.id){if(!activeId){activeId=meta.id;activeTitle=meta.title;activeSubject=meta.subject;accruedMs=pendTake(meta.id);qualified=false;segmentStart=now}else{accrue(now)}
       if(!qualified&&accruedMs>=MIN_READ_SECONDS*1000){qualified=true;const secs=Math.floor(accruedMs/1000);if(secs>0){logSeconds(secs);accruedMs-=secs*1000}}
     }
   }
   setInterval(tick,1000);
   document.addEventListener('visibilitychange',tick);
-  window.addEventListener('pagehide',()=>{if(activeId){accrue(Date.now());if(qualified&&accruedMs>0)logSeconds(Math.floor(accruedMs/1000));activeId='';segmentStart=0;accruedMs=0;qualified=false}});
+  window.addEventListener('pagehide',()=>{if(activeId){accrue(Date.now());if(qualified){if(accruedMs>0)logSeconds(Math.floor(accruedMs/1000))}else pendPut(activeId,accruedMs);activeId='';segmentStart=0;accruedMs=0;qualified=false}});
   tick();
 })();
 
