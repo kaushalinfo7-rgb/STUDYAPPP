@@ -6633,11 +6633,14 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     return /^(javascript:|vbscript:|data:text\/html)/.test(c);
   }
   /* 100vh inside an auto-height iframe makes the note grow forever and look "zoomed" - neutralise it */
-  function fixCss(css){
-    return String(css||'').replace(
-      /(min-height|height)\s*:\s*(?:100(?:\.\d+)?(?:d|s|l)?vh|calc\(\s*100(?:d|s|l)?vh[^;}]*\))/gi,
-      (m,p)=>p.toLowerCase()==='min-height'?'min-height:0':'height:auto'
-    );
+  function fixCss(css,inlineEl){
+    const VH=/(min-height|height)\s*:\s*(?:100(?:\.\d+)?(?:d|s|l)?vh|calc\(\s*100(?:d|s|l)?vh[^;}]*\))/gi;
+    const sub=(decl,isRoot)=>decl.replace(VH,(m,p)=>p.toLowerCase()==='min-height'?'min-height:0':(isRoot?'height:auto':'height:520px'));
+    if(inlineEl){const t=(inlineEl.tagName||'').toLowerCase();return sub(String(css||''),t==='body'||t==='html')}
+    return String(css||'').replace(/([^{}]+)\{([^{}]*)\}/g,(m,sel,body)=>{
+      const root=/(^|[\s,>+~])(html|body)\s*(,|$)|:root/i.test(sel.trim()+',');
+      return sel+'{'+sub(body,root)+'}';
+    });
   }
   function attrString(el){
     return [...el.attributes].map(a=>a.name+'="'+String(a.value).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"').join(' ');
@@ -6677,7 +6680,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
         const n=a.name.toLowerCase();
         if(n==='srcdoc'||n==='formaction'){el.removeAttribute(a.name);return}
         if(['href','src','xlink:href','action','poster','background'].includes(n)&&urlBad(a.value)){el.removeAttribute(a.name);return}
-        if(n==='style')el.setAttribute('style',fixCss(a.value));
+        if(n==='style')el.setAttribute('style',fixCss(a.value,el));
       });
     });
     doc.querySelectorAll('style').forEach(st=>{st.textContent=fixCss(st.textContent)});
@@ -6685,8 +6688,8 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     /* Format formulas before serializing so saved notes and live previews share the same chemistry typography. */
     try{if(window.kaushalFormatChemistry)window.kaushalFormatChemistry(doc.body)}catch(e){}
 
-    const headExtra=[...(doc.head?doc.head.querySelectorAll('style,link'):[])].map(x=>x.outerHTML).join('');
-    if(doc.head)doc.head.querySelectorAll('style,link').forEach(x=>x.remove());
+    const headExtra=[...(doc.head?doc.head.querySelectorAll('style,link,script'):[])].map(x=>x.outerHTML).join('');
+    if(doc.head)doc.head.querySelectorAll('style,link,script').forEach(x=>x.remove());
     const ha=attrString(doc.documentElement),ba=attrString(doc.body);
 
     const bridge='<script>(function(){var id='+JSON.stringify(frameId)+';function h(){var d=document,b=d.body,r=d.documentElement;var v=Math.max(r.scrollHeight,b?b.scrollHeight:0);try{var bb=b.getBoundingClientRect();v=Math.max(v,Math.ceil(bb.bottom+(parseFloat(getComputedStyle(b).marginBottom)||0)))}catch(e){}if(r.scrollWidth>r.clientWidth+1)v+=16;parent.postMessage({kaushalNote:id,h:v},"*")}'+
@@ -6695,6 +6698,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       'document.addEventListener("click",function(ev){var a=ev.target&&ev.target.closest?ev.target.closest("a[href]"):null;if(!a)return;var f=(a.getAttribute("href")||"").trim();ev.preventDefault();if(f.charAt(0)==="#"){var t=null;try{t=document.getElementById(decodeURIComponent(f.slice(1)))}catch(e){}if(t)t.scrollIntoView({behavior:"smooth"})}else if(/^https?:\\/\\//i.test(f)){parent.postMessage({kaushalNote:id,open:f},"*")}});'+
       'h();})();<\/script>';
     return '<!doctype html><html'+(ha?' '+ha:'')+'><head><meta charset="UTF-8">'+
+      '<script>(function(){["localStorage","sessionStorage"].forEach(function(k){try{void window[k].length}catch(e){var m={};try{Object.defineProperty(window,k,{configurable:true,value:{getItem:function(a){return a in m?m[a]:null},setItem:function(a,b){m[a]=String(b)},removeItem:function(a){delete m[a]},clear:function(){m={}},key:function(i){return Object.keys(m)[i]||null},get length(){return Object.keys(m).length}}})}catch(_){}}})})();<\/script>'+
       '<style id="kaushal-note-base">'+BASE_CSS+'</style>'+headExtra+
       '<script>window.MathJax={tex:{inlineMath:[["\\\\(","\\\\)"],["$","$"]],displayMath:[["$$","$$"],["\\\\[","\\\\]"]]},startup:{typeset:true}};<\/script>'+
       '<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"><\/script>'+
