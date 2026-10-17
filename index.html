@@ -3239,8 +3239,8 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
   <div class="cc-top"><div><span class="cc-kicker">YOUR DAILY MISSION</span><h2>Study Command Center</h2><p>Read smarter. Recall actively. Revise before you forget.</p></div><div class="cc-date" id="ccTodayLabel">TODAY · CGPSC PREP</div></div>
   <div class="cc-metrics">
     <article><span class="cc-icon">▤</span><small>Saved notes</small><strong id="ccNotesCount">0</strong><em>Knowledge base</em></article>
-    <article><span class="cc-icon">↻</span><small>Due for revision</small><strong id="ccDueCount">0</strong><em>Review queue</em></article>
-    <article><span class="cc-icon">◎</span><small>Topics mastered</small><strong id="ccMasteredCount">0</strong><em>Marked by you</em></article>
+    <article><span class="cc-icon">✓</span><small>Today's plan</small><strong id="ccPlanDone">0/0</strong><em>Topics completed</em></article>
+    <article><span class="cc-icon">?</span><small>Questions today</small><strong id="ccQuestionsToday">0</strong><em>Practice solved</em></article>
     <article><span class="cc-icon">◷</span><small>Study momentum</small><strong id="ccStudyMinutes">0m</strong><em>Logged today</em></article>
   </div>
   <div class="cc-footer"><span><i></i> Notes, revision and progress are connected</span><span>CGPSC · CONSISTENCY OVER CRAMMING</span></div>
@@ -7936,6 +7936,9 @@ const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth
 const datePlus=days=>{const d=new Date();d.setDate(d.getDate()+days);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const STT_KEY_CC='cgpsc_study_time_v1';
 const todayStudySecs=()=>{try{const raw=(typeof window.storageGet==='function'?window.storageGet(STT_KEY_CC,''):localStorage.getItem(STT_KEY_CC))||'{}';const x=JSON.parse(raw)||{},del=x.del||{},t=today();return (Array.isArray(x.sessions)?x.sessions:[]).reduce((a,s)=>a+((s&&s.date===t&&!del[s.id])?(Number(s.secs)||0):0),0)}catch(e){return 0}};
+const todayPlanStats=()=>{const p=read('cgpsc_daily_study_plan_v1',{}),a=(p&&p.days||{})[today()],arr=Array.isArray(a)?a:[];return{done:arr.filter(x=>x&&x.done).length,total:arr.length}};
+const todayQuestions=()=>{const t=read('cgpsc_question_tracker_v2',{}),r=(t&&t.days||{})[today()];return !r?0:(Array.isArray(r)?r.length:Object.keys(r).length)};
+function paintExtra(){const a=$('ccPlanDone'),b=$('ccQuestionsToday');if(a){const x=todayPlanStats();a.textContent=x.done+'/'+x.total}if(b)b.textContent=todayQuestions()}
 const fmtMins=secs=>{const m=Math.floor(secs/60);if(m>=60)return Math.floor(m/60)+'h '+(m%60)+'m';if(m>0)return m+'m';return secs>0?'<1m':'0m'};
 const due=n=>{const m=meta()[String(n.id)]||{};return m.status==='revision'||!!m.nextReview&&m.nextReview<=today()};
 function safe(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -7943,7 +7946,7 @@ function openNote(n){try{write('kaushal_smart_last_note_v1',String(n.id));if(typ
 let filter='all';
 function render(){
  const notes=allNotes(),m=meta(),q=($('snSearch')?.value||'').toLowerCase().trim(),dueNotes=notes.filter(due),mastered=notes.filter(n=>(m[String(n.id)]||{}).status==='mastered');
- if($('ccNotesCount'))$('ccNotesCount').textContent=notes.length;if($('ccDueCount'))$('ccDueCount').textContent=dueNotes.length;if($('ccMasteredCount'))$('ccMasteredCount').textContent=mastered.length;if($('ccStudyMinutes'))$('ccStudyMinutes').textContent=fmtMins(todayStudySecs());if($('snAllCount'))$('snAllCount').textContent=notes.length;if($('snDueBadge'))$('snDueBadge').textContent=dueNotes.length;
+ if($('ccNotesCount'))$('ccNotesCount').textContent=notes.length;paintExtra();if($('ccStudyMinutes'))$('ccStudyMinutes').textContent=fmtMins(todayStudySecs());if($('snAllCount'))$('snAllCount').textContent=notes.length;if($('snDueBadge'))$('snDueBadge').textContent=dueNotes.length;
  if($('ccTodayLabel'))$('ccTodayLabel').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}).toUpperCase();
  const filtered=notes.filter(n=>{const mm=m[String(n.id)]||{},st=mm.status||'not-started';return (filter==='all'||(filter==='revision'?due(n):st===filter))&&(!q||(String(n.title||'').toLowerCase()+' '+n.subject.toLowerCase()+' '+String(n.topic||'').toLowerCase()).includes(q))}).slice(0,12);
  const list=$('snNotesList');if(!list)return;
@@ -7967,7 +7970,7 @@ function openPersonal(id){const n=allNotes().find(x=>String(x.id)===String(id));
 $('snSearch')?.addEventListener('input',render);
 $('snResumeBtn')?.addEventListener('click',()=>{const id=read('kaushal_smart_last_note_v1',''),notes=allNotes(),n=notes.find(x=>String(x.id)===String(id))||notes.find(x=>(meta()[String(x.id)]||{}).status==='reading')||notes[0];if(n)openNote(n);else alert('Save a note first, then you can resume it here.')});
 window.kaushalSmartNotesRender=render;
-(function(){const paintMinutes=()=>{const e=$('ccStudyMinutes');if(e)e.textContent=fmtMins(todayStudySecs())};const wrap=()=>{const f=window.kaushalLogStudyTime;if(typeof f==='function'&&!f.__ccWrapped){const w=function(){const r=f.apply(this,arguments);try{paintMinutes()}catch(e){}return r};w.__ccWrapped=true;window.kaushalLogStudyTime=w}};wrap();document.addEventListener('DOMContentLoaded',wrap);
+(function(){const paintMinutes=()=>{const e=$('ccStudyMinutes');if(e)e.textContent=fmtMins(todayStudySecs());paintExtra()};const wrap=()=>{const f=window.kaushalLogStudyTime;if(typeof f==='function'&&!f.__ccWrapped){const w=function(){const r=f.apply(this,arguments);try{paintMinutes()}catch(e){}return r};w.__ccWrapped=true;window.kaushalLogStudyTime=w}};wrap();document.addEventListener('DOMContentLoaded',wrap);
 setInterval(()=>{try{paintMinutes()}catch(e){}},5000);})();
 document.addEventListener('DOMContentLoaded',render);
 window.addEventListener('storage',e=>{if(e.key===NOTES_KEY||e.key===META_KEY)render()});
