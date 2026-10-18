@@ -4049,7 +4049,7 @@ function save(){
 async function restoreSavedExam(){
   let localSaved=null;
   try{const raw=localStorage.getItem('cgpsc_mock_v2');if(raw)localSaved=JSON.parse(raw)}catch(e){}
-  const cloudSaved=await cloudLoad();
+  const cloudSaved=null; /* FIX: never block startup on a multi-MB cloud download; the background sync loads cloud data */
   let chosen=localSaved;
   const localSnapshot=readLocalSnapshot();
   if(cloudSaved&&localSnapshot){
@@ -4061,7 +4061,7 @@ async function restoreSavedExam(){
   if(chosen&&applySnapshot(chosen))return true;
   if(localSaved&&localSaved.questions&&localSaved.state){
     try{App.questions=validateData(localSaved.questions);App.cfg={...App.cfg,...(localSaved.cfg||{})};App.state={...App.state,...localSaved.state,answers:{...(localSaved.state.answers||{})},status:{...(localSaved.state.status||{})}};App.startRemaining=Number(localSaved.startRemaining)||App.state.remaining||0;App.revision=revisionMerge(revisionLoad(),localSaved.revision||[]);
-  if(localSaved.plan&&localSaved.plan.days){try{localStorage.setItem(PLAN_KEY,JSON.stringify(localSaved.plan))}catch(e){}}revisionSave(App.revision);App.questions.forEach(q=>{if(!App.state.status[q.id])App.state.status[q.id]=App.state.answers[q.id]?'answered':'not-visited'});if(App.state.started&&App.state.remaining>0){$('infoText').textContent=`Saved exam found • ${App.questions.length} questions • ${Math.ceil(App.state.remaining/60)} minutes remaining`;$('examInfo').classList.remove('hidden');$('startBtn').textContent='RESUME SAVED EXAM';$('startBtn').dataset.resume='1';return true}}catch(e){console.warn('Local saved exam was ignored:',e)}}
+  revisionSave(App.revision);App.questions.forEach(q=>{if(!App.state.status[q.id])App.state.status[q.id]=App.state.answers[q.id]?'answered':'not-visited'});if(App.state.started&&App.state.remaining>0){$('infoText').textContent=`Saved exam found • ${App.questions.length} questions • ${Math.ceil(App.state.remaining/60)} minutes remaining`;$('examInfo').classList.remove('hidden');$('startBtn').textContent='RESUME SAVED EXAM';$('startBtn').dataset.resume='1';return true}}catch(e){console.warn('Local saved exam was ignored:',e)}}
   return false;
 }
 
@@ -8050,6 +8050,114 @@ window.addEventListener('storage',e=>{if(e.key===NOTES_KEY||e.key===META_KEY)ren
 setInterval(()=>{if(!$('start')?.classList.contains('hidden')||!$('notesScreen')?.classList.contains('hidden'))render()},15000);
 })();
 
+</script>
+<script id="kaushal-plan-sync-v1">
+/* ============================================================
+   DAILY STUDY PLAN — dedicated lightweight cloud sync
+   The plan used to travel inside the one huge cloud record (question banks +
+   notes + everything), so every tick/edit re-uploaded megabytes and every other
+   device re-downloaded them. The plan now has its own tiny row (a few KB):
+   - edits are pushed in ~0.3s, with compare-and-swap + merge (no lost edits)
+   - other devices check a tiny "updated_at" every 5s and on focus / tab-show
+   - local data renders instantly; the network never blocks the screen
+   If the extra row cannot be created (database policy), it silently falls back
+   to the old full sync, so nothing breaks.
+   ============================================================ */
+(function(){
+'use strict';
+const ROW='00000000-0000-0000-0000-000000000002';
+const VER_KEY='cgpsc_plan_srv_ver_v1';
+const $=id=>document.getElementById(id);
+let busy=false,queued=false,pulling=false,fallback=false,dirty=false,pushTimer=null,pollTimer=null;
+const canon=v=>{if(Array.isArray(v))return '['+v.map(canon).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';return JSON.stringify(v===undefined?null:v)};
+const ep=()=>cloudEndpoint()+'?id=eq.'+encodeURIComponent(ROW);
+const hasData=p=>p&&p.days&&Object.keys(p.days).length>0;
+const httpErr=s=>{const e=new Error('http '+s);e.status=s;return e};
+const status=t=>{try{cloudStatus(t)}catch(e){}};
+function refreshUI(){
+  try{const ps=$('planScreen');if(ps&&!ps.classList.contains('hidden')&&typeof planRender==='function')planRender()}catch(e){}
+  try{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()}catch(e){}
+}
+function schedule(ms){clearTimeout(pushTimer);pushTimer=setTimeout(()=>push(false),ms)}
+
+async function pull(force){
+  if(!cloudEnabled()||fallback||pulling)return;
+  pulling=true;
+  try{
+    const h={headers:cloudHeaders(),cache:'no-store'};
+    let r=await fetch(ep()+'&select=updated_at',h);if(!r.ok)throw httpErr(r.status);
+    let rows=await r.json();
+    if(!rows.length){ if(hasData(planLoad()))schedule(0); return }      /* no cloud copy yet → upload ours */
+    if(!force&&rows[0].updated_at===storageGet(VER_KEY,''))return;       /* nothing new: 1 tiny request */
+    r=await fetch(ep()+'&select=payload,updated_at',h);if(!r.ok)throw httpErr(r.status);
+    const row=(await r.json())[0];if(!row)return;
+    const remote=row.payload||{},local=planLoad(),merged=planMergeData(local,remote);
+    if(canon(merged)!==canon(local)){storageSet(PLAN_KEY,JSON.stringify(merged));refreshUI()}
+    storageSet(VER_KEY,row.updated_at);
+    if(canon(merged)!==canon(remote))schedule(0);                        /* we hold changes the cloud lacks */
+    else{dirty=false;status('Plan synced')}
+  }catch(e){
+    if(e&&(e.status===401||e.status===403||e.status===404)){fallback=true;status('Plan sync: using full sync');schedule(0)}
+    else console.warn('plan pull:',e)
+  }finally{pulling=false}
+}
+
+async function push(keepalive){
+  if(!cloudEnabled())return;
+  if(fallback){dirty=false;try{queueCloudSave()}catch(e){}return}
+  if(busy){queued=true;return}
+  busy=true;
+  try{
+    for(let i=0;i<3;i++){
+      const local=planLoad(),ver=storageGet(VER_KEY,''),at=new Date().toISOString();
+      const h={...cloudHeaders(),Prefer:'return=representation'},body=JSON.stringify({payload:local,updated_at:at});
+      let rows;
+      if(ver){
+        const r=await fetch(ep()+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body,keepalive:!!keepalive});
+        if(!r.ok)throw httpErr(r.status);rows=await r.json();
+      }else{
+        const r=await fetch(cloudEndpoint(),{method:'POST',headers:h,body:JSON.stringify({id:ROW,payload:local,updated_at:at}),keepalive:!!keepalive});
+        if(r.status===409)rows=[];else{if(!r.ok)throw httpErr(r.status);rows=await r.json()}
+      }
+      if(rows&&rows.length){storageSet(VER_KEY,rows[0].updated_at||at);dirty=false;status('Plan synced just now');break}
+      await pull(true);                                                   /* someone else saved first → merge, retry */
+    }
+  }catch(e){
+    if(e&&(e.status===401||e.status===403||e.status===404)){fallback=true;status('Plan sync: using full sync');try{queueCloudSave()}catch(_){}}
+    else{status('Offline — plan saved on this device');console.warn('plan push:',e)}
+  }finally{busy=false;if(queued){queued=false;schedule(150)}}
+}
+
+/* ---- route every plan write through the light sync (no more full-payload upload) ---- */
+window.planSave=function(data){storageSet(PLAN_KEY,JSON.stringify(data));dirty=true;if(fallback){try{queueCloudSave()}catch(e){}}else schedule(300)};
+window.planToggle=function(id){
+  const data=planLoad(),items=planItems().map(x=>x.id===id?{...x,done:!x.done,completedAt:!x.done?new Date().toISOString():null,u:new Date().toISOString()}:x);
+  data.days[planSelectedDate]=items;planSave(data);planRender();
+};
+window.planReorder=function(ids){
+  const data=planLoad(),items=planItems(),map=new Map(items.map(x=>[x.id,x])),out=[];
+  ids.forEach(i=>{if(map.has(i)){out.push(map.get(i));map.delete(i)}});map.forEach(x=>out.push(x));
+  if(out.every((x,i)=>x===items[i]||(items[i]&&x.id===items[i].id)))return;
+  data.days[planSelectedDate]=out;
+  data.ordAt=data.ordAt&&typeof data.ordAt==='object'&&!Array.isArray(data.ordAt)?data.ordAt:{};
+  data.ordAt[planSelectedDate]=new Date().toISOString();
+  planSave(data);
+};
+const _open=window.planOpenScreen;
+if(typeof _open==='function')window.planOpenScreen=function(){const r=_open.apply(this,arguments);pull(false);return r};
+
+/* ---- when to sync ---- */
+const tick=()=>{if(document.visibilityState==='visible')pull(false)};
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){pull(false)}
+  else if(dirty){clearTimeout(pushTimer);push(true)}                    /* flush before the tab sleeps */
+});
+window.addEventListener('focus',tick);
+window.addEventListener('online',()=>{pull(true)});
+window.addEventListener('pagehide',()=>{if(dirty)push(true)});
+clearInterval(pollTimer);pollTimer=setInterval(tick,5000);
+setTimeout(()=>pull(true),0);                                           /* first sync starts immediately, in the background */
+})();
 </script>
 <script id="bank-import-collapse">
 (function(){
