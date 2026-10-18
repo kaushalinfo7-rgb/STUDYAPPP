@@ -8053,83 +8053,95 @@ setInterval(()=>{if(!$('start')?.classList.contains('hidden')||!$('notesScreen')
 </script>
 <script id="kaushal-plan-sync-v1">
 /* ============================================================
-   DAILY STUDY PLAN — dedicated lightweight cloud sync
-   The plan used to travel inside the one huge cloud record (question banks +
-   notes + everything), so every tick/edit re-uploaded megabytes and every other
-   device re-downloaded them. The plan now has its own tiny row (a few KB):
-   - edits are pushed in ~0.3s, with compare-and-swap + merge (no lost edits)
-   - other devices check a tiny "updated_at" every 5s and on focus / tab-show
+   DAILY STUDY PLAN page — dedicated lightweight cloud sync
+   Both the topic list AND the study-time tracker used to travel inside the one
+   huge cloud record (question banks + notes + everything), so every tick, edit,
+   or saved session re-uploaded megabytes. Each now has its own tiny row:
+     plan        → row …0002   (topics, order, deletions)
+     study time  → row …0003   (sessions, deletions)
+   - edits are pushed ~0.3s later with compare-and-swap + merge (no lost edits)
+   - other devices check a tiny "updated_at" every 5s / on focus / on tab-show
    - local data renders instantly; the network never blocks the screen
-   If the extra row cannot be created (database policy), it silently falls back
-   to the old full sync, so nothing breaks.
+   If an extra row cannot be created (database policy) that part silently falls
+   back to the old full sync, so nothing breaks.
    ============================================================ */
 (function(){
 'use strict';
-const ROW='00000000-0000-0000-0000-000000000002';
-const VER_KEY='cgpsc_plan_srv_ver_v1';
 const $=id=>document.getElementById(id);
-let busy=false,queued=false,pulling=false,fallback=false,dirty=false,pushTimer=null,pollTimer=null;
 const canon=v=>{if(Array.isArray(v))return '['+v.map(canon).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';return JSON.stringify(v===undefined?null:v)};
-const ep=()=>cloudEndpoint()+'?id=eq.'+encodeURIComponent(ROW);
-const hasData=p=>p&&p.days&&Object.keys(p.days).length>0;
 const httpErr=s=>{const e=new Error('http '+s);e.status=s;return e};
-const status=t=>{try{cloudStatus(t)}catch(e){}};
+const blocked=e=>e&&(e.status===401||e.status===403||e.status===404);
 function refreshUI(){
   try{const ps=$('planScreen');if(ps&&!ps.classList.contains('hidden')&&typeof planRender==='function')planRender()}catch(e){}
   try{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()}catch(e){}
 }
-function schedule(ms){clearTimeout(pushTimer);pushTimer=setTimeout(()=>push(false),ms)}
+/* study sessions have no stable order → sort by id so every device produces identical JSON (prevents sync ping-pong) */
+const stNorm=x=>{const m=stMerge(x||{},{});m.sessions.sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);return m};
 
-async function pull(force){
-  if(!cloudEnabled()||fallback||pulling)return;
-  pulling=true;
-  try{
-    const h={headers:cloudHeaders(),cache:'no-store'};
-    let r=await fetch(ep()+'&select=updated_at',h);if(!r.ok)throw httpErr(r.status);
-    let rows=await r.json();
-    if(!rows.length){ if(hasData(planLoad()))schedule(0); return }      /* no cloud copy yet → upload ours */
-    if(!force&&rows[0].updated_at===storageGet(VER_KEY,''))return;       /* nothing new: 1 tiny request */
-    r=await fetch(ep()+'&select=payload,updated_at',h);if(!r.ok)throw httpErr(r.status);
-    const row=(await r.json())[0];if(!row)return;
-    const remote=row.payload||{},local=planLoad(),merged=planMergeData(local,remote);
-    if(canon(merged)!==canon(local)){storageSet(PLAN_KEY,JSON.stringify(merged));refreshUI()}
-    storageSet(VER_KEY,row.updated_at);
-    if(canon(merged)!==canon(remote))schedule(0);                        /* we hold changes the cloud lacks */
-    else{dirty=false;status('Plan synced')}
-  }catch(e){
-    if(e&&(e.status===401||e.status===403||e.status===404)){fallback=true;status('Plan sync: using full sync');schedule(0)}
-    else console.warn('plan pull:',e)
-  }finally{pulling=false}
-}
-
-async function push(keepalive){
-  if(!cloudEnabled())return;
-  if(fallback){dirty=false;try{queueCloudSave()}catch(e){}return}
-  if(busy){queued=true;return}
-  busy=true;
-  try{
-    for(let i=0;i<3;i++){
-      const local=planLoad(),ver=storageGet(VER_KEY,''),at=new Date().toISOString();
-      const h={...cloudHeaders(),Prefer:'return=representation'},body=JSON.stringify({payload:local,updated_at:at});
-      let rows;
-      if(ver){
-        const r=await fetch(ep()+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body,keepalive:!!keepalive});
-        if(!r.ok)throw httpErr(r.status);rows=await r.json();
-      }else{
-        const r=await fetch(cloudEndpoint(),{method:'POST',headers:h,body:JSON.stringify({id:ROW,payload:local,updated_at:at}),keepalive:!!keepalive});
-        if(r.status===409)rows=[];else{if(!r.ok)throw httpErr(r.status);rows=await r.json()}
+function channel(cfg){
+  const ch={busy:false,queued:false,pulling:false,fallback:false,dirty:false,timer:null};
+  const ep=()=>cloudEndpoint()+'?id=eq.'+encodeURIComponent(cfg.row);
+  ch.schedule=ms=>{clearTimeout(ch.timer);ch.timer=setTimeout(()=>ch.push(false),ms)};
+  ch.touch=()=>{ch.dirty=true;if(ch.fallback){try{queueCloudSave()}catch(e){}}else ch.schedule(cfg.delay)};
+  ch.pull=async function(force){
+    if(!cloudEnabled()||ch.fallback||ch.pulling)return;
+    ch.pulling=true;
+    try{
+      const h={headers:cloudHeaders(),cache:'no-store'};
+      let r=await fetch(ep()+'&select=updated_at',h);if(!r.ok)throw httpErr(r.status);
+      let rows=await r.json();
+      if(!rows.length){if(cfg.hasData(cfg.load()))ch.schedule(0);return}       /* no cloud copy yet → upload ours */
+      if(!force&&rows[0].updated_at===storageGet(cfg.ver,''))return;           /* nothing new: 1 tiny request */
+      r=await fetch(ep()+'&select=payload,updated_at',h);if(!r.ok)throw httpErr(r.status);
+      const row=(await r.json())[0];if(!row)return;
+      const remote=row.payload||{},local=cfg.load(),merged=cfg.merge(local,remote);
+      if(canon(merged)!==canon(cfg.norm(local))){storageSet(cfg.key,JSON.stringify(merged));refreshUI()}
+      storageSet(cfg.ver,row.updated_at);
+      if(canon(merged)!==canon(cfg.norm(remote)))ch.schedule(0);               /* we hold changes the cloud lacks */
+      else ch.dirty=false;
+    }catch(e){
+      if(blocked(e)){ch.fallback=true;ch.schedule(0)}else console.warn(cfg.name+' pull:',e)
+    }finally{ch.pulling=false}
+  };
+  ch.push=async function(keepalive){
+    if(!cloudEnabled())return;
+    if(ch.fallback){ch.dirty=false;try{queueCloudSave()}catch(e){}return}
+    if(ch.busy){ch.queued=true;return}
+    ch.busy=true;
+    try{
+      for(let i=0;i<3;i++){
+        const local=cfg.load(),ver=storageGet(cfg.ver,''),at=new Date().toISOString();
+        const h={...cloudHeaders(),Prefer:'return=representation'};
+        let rows;
+        if(ver){
+          const r=await fetch(ep()+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body:JSON.stringify({payload:local,updated_at:at}),keepalive:!!keepalive});
+          if(!r.ok)throw httpErr(r.status);rows=await r.json();
+        }else{
+          const r=await fetch(cloudEndpoint(),{method:'POST',headers:h,body:JSON.stringify({id:cfg.row,payload:local,updated_at:at}),keepalive:!!keepalive});
+          if(r.status===409)rows=[];else{if(!r.ok)throw httpErr(r.status);rows=await r.json()}
+        }
+        if(rows&&rows.length){storageSet(cfg.ver,rows[0].updated_at||at);ch.dirty=false;break}
+        await ch.pull(true);                                                    /* someone else saved first → merge, retry */
       }
-      if(rows&&rows.length){storageSet(VER_KEY,rows[0].updated_at||at);dirty=false;status('Plan synced just now');break}
-      await pull(true);                                                   /* someone else saved first → merge, retry */
-    }
-  }catch(e){
-    if(e&&(e.status===401||e.status===403||e.status===404)){fallback=true;status('Plan sync: using full sync');try{queueCloudSave()}catch(_){}}
-    else{status('Offline — plan saved on this device');console.warn('plan push:',e)}
-  }finally{busy=false;if(queued){queued=false;schedule(150)}}
+    }catch(e){
+      if(blocked(e)){ch.fallback=true;try{queueCloudSave()}catch(_){}}
+      else console.warn(cfg.name+' push:',e)
+    }finally{ch.busy=false;if(ch.queued){ch.queued=false;ch.schedule(150)}}
+  };
+  return ch;
 }
 
-/* ---- route every plan write through the light sync (no more full-payload upload) ---- */
-window.planSave=function(data){storageSet(PLAN_KEY,JSON.stringify(data));dirty=true;if(fallback){try{queueCloudSave()}catch(e){}}else schedule(300)};
+const plan=channel({name:'plan',row:'00000000-0000-0000-0000-000000000002',ver:'cgpsc_plan_srv_ver_v1',key:PLAN_KEY,delay:300,
+  load:planLoad,norm:x=>x||{},merge:(l,r)=>planMergeData(l,r),
+  hasData:p=>!!(p&&p.days&&Object.keys(p.days).length)});
+const study=channel({name:'study',row:'00000000-0000-0000-0000-000000000003',ver:'cgpsc_study_srv_ver_v1',key:STT_KEY,delay:800,
+  load:stLoad,norm:stNorm,merge:(l,r)=>stNorm(stMerge(l,r)),
+  hasData:p=>!!(p&&((p.sessions&&p.sessions.length)||(p.del&&Object.keys(p.del).length)))});
+const all=[plan,study];
+
+/* ---- route every plan / study-time write through the light sync (no more full-payload upload) ---- */
+window.planSave=function(data){storageSet(PLAN_KEY,JSON.stringify(data));plan.touch()};
+window.stSave=function(d){storageSet(STT_KEY,JSON.stringify(d));study.touch()};
 window.planToggle=function(id){
   const data=planLoad(),items=planItems().map(x=>x.id===id?{...x,done:!x.done,completedAt:!x.done?new Date().toISOString():null,u:new Date().toISOString()}:x);
   data.days[planSelectedDate]=items;planSave(data);planRender();
@@ -8143,20 +8155,40 @@ window.planReorder=function(ids){
   data.ordAt[planSelectedDate]=new Date().toISOString();
   planSave(data);
 };
+/* BUG FIX: "Upcoming" labelled the first row "Today" and the second "Tomorrow" even when you were
+   looking at a different day. Labels now compare against the real current date. */
+window.planRenderUpcoming=function(){
+  const el=$('planUpcomingList'),now=planDateObj(),rows=[],real=new Date(),tom=new Date(real.getFullYear(),real.getMonth(),real.getDate()+1);
+  const rk=trackerDate(real),tk=trackerDate(tom);
+  for(let i=0;i<7;i++){
+    const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i),key=trackerDate(d),items=planItems(key);
+    const label=key===rk?'Today':key===tk?'Tomorrow':d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'});
+    rows.push(`<div class="plan-upcoming-row" data-plan-date="${key}"><span class="plan-upcoming-date">${label}</span><span class="plan-upcoming-count">${items.filter(x=>!x.done).length}/${items.length}</span></div>`);
+  }
+  el.innerHTML=rows.join('');
+  el.querySelectorAll('[data-plan-date]').forEach(x=>x.onclick=()=>planOpen(x.dataset.planDate));
+};
 const _open=window.planOpenScreen;
-if(typeof _open==='function')window.planOpenScreen=function(){const r=_open.apply(this,arguments);pull(false);return r};
+if(typeof _open==='function')window.planOpenScreen=function(){const r=_open.apply(this,arguments);rollover();all.forEach(c=>c.pull(false));return r};
+
+/* BUG FIX: if the app stayed open past midnight, "Today" kept pointing at yesterday. */
+let lastToday=trackerDate(new Date());
+function rollover(){
+  const t=trackerDate(new Date());if(t===lastToday)return;
+  const wasToday=planSelectedDate===lastToday;lastToday=t;if(wasToday)planSelectedDate=t;refreshUI();
+}
 
 /* ---- when to sync ---- */
-const tick=()=>{if(document.visibilityState==='visible')pull(false)};
+const tick=()=>{rollover();if(document.visibilityState==='visible')all.forEach(c=>c.pull(false))};
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'){pull(false)}
-  else if(dirty){clearTimeout(pushTimer);push(true)}                    /* flush before the tab sleeps */
+  if(document.visibilityState==='visible'){tick()}
+  else all.forEach(c=>{if(c.dirty){clearTimeout(c.timer);c.push(true)}})   /* flush before the tab sleeps */
 });
 window.addEventListener('focus',tick);
-window.addEventListener('online',()=>{pull(true)});
-window.addEventListener('pagehide',()=>{if(dirty)push(true)});
-clearInterval(pollTimer);pollTimer=setInterval(tick,5000);
-setTimeout(()=>pull(true),0);                                           /* first sync starts immediately, in the background */
+window.addEventListener('online',()=>all.forEach(c=>c.pull(true)));
+window.addEventListener('pagehide',()=>all.forEach(c=>{if(c.dirty)c.push(true)}));
+setInterval(tick,5000);
+setTimeout(()=>all.forEach(c=>c.pull(true)),0);                           /* first sync starts immediately, in the background */
 })();
 </script>
 <script id="bank-import-collapse">
