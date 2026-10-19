@@ -6034,7 +6034,7 @@ queueCloudSave=function(){if(!cloudEnabled()||!ready)return;clearTimeout(cloudSa
 const msig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),revisionLoad(),storageGet(ATT,'')]));
 let okMain=null;
 const syncBeat=async()=>{try{await cloudPullLatest()}catch(e){}try{if(!cloudEnabled()||!ready||cloudBusy)return;const m=msig();if(okMain===null||sig()===storageGet(SYNC,'')){okMain=m;return}if(m!==okMain)cloudSaveNow()}catch(e){}};
-startCloudAutoSync=function(){if(!cloudEnabled())return;clearInterval(cloudPollTimer);cloudPollTimer=setInterval(syncBeat,5000);syncBeat()};
+startCloudAutoSync=function(){if(!cloudEnabled())return;clearInterval(cloudPollTimer);cloudPollTimer=setInterval(syncBeat,120000);syncBeat()};
 window.addEventListener('online',()=>{if(cloudEnabled())pull(true)});   /* pull before any push */
 
 /* ---------- exam flow ---------- */
@@ -8420,7 +8420,7 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('focus',tick);
 window.addEventListener('online',()=>all.forEach(c=>c.pull(true)));
 window.addEventListener('pagehide',()=>all.forEach(c=>{if(c.dirty)c.push(true)}));
-setInterval(tick,5000);
+setInterval(tick,120000); // Reduced idle polling from every 5 seconds to every 2 minutes.
 (window.__kbReady||Promise.resolve()).then(()=>all.forEach(c=>c.pull(true)));                           /* first sync starts immediately, in the background */
 })();
 </script>
