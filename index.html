@@ -6440,10 +6440,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       'img{max-width:100%;height:auto;}' +
       'table{max-width:100%;}' +
       'pre{max-width:100%;overflow:auto;white-space:pre-wrap;}' +
-      '</style></head><body>'+body+'
-
-
-</body></html>';
+      '</style></head><body>'+body+'</body></html>';
   }
 
   function mountNoteFrame(container,raw){
@@ -8421,10 +8418,10 @@ document.addEventListener('visibilitychange',()=>{
   else all.forEach(c=>{if(c.dirty){clearTimeout(c.timer);c.push(true)}})   /* flush before the tab sleeps */
 });
 window.addEventListener('focus',tick);
-window.addEventListener('online',()=>all.forEach(c=>c.pull(false))); // Check timestamps first; fetch payload only if changed.
+window.addEventListener('online',()=>all.forEach(c=>c.pull(true)));
 window.addEventListener('pagehide',()=>all.forEach(c=>{if(c.dirty)c.push(true)}));
-setInterval(tick,120000); // Reduced idle polling from every 5 seconds to every 2 minutes.
-(window.__kbReady||Promise.resolve()).then(()=>all.forEach(c=>c.pull(false)));                           /* first sync starts immediately; known versions skip unchanged payloads */
+setInterval(tick,120000);
+(window.__kbReady||Promise.resolve()).then(()=>all.forEach(c=>c.pull(true)));                           /* first sync starts immediately, in the background */
 })();
 </script>
 <script id="bank-import-collapse">
