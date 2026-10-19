@@ -5806,8 +5806,10 @@ cloudSaveNow=async function(){
  }catch(e){cloudStatus('Offline — saved on this device');console.warn(e)}
  finally{cloudBusy=false;if(cloudQueued){cloudQueued=false;setTimeout(cloudSaveNow,300)}}
 };
-queueCloudSave=function(){if(!cloudEnabled()||!ready)return;clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>{if(sig()!==storageGet(SYNC,''))cloudSaveNow()},$('exam').classList.contains('hidden')?1500:20000)};
-startCloudAutoSync=function(){if(!cloudEnabled())return;clearInterval(cloudPollTimer);cloudPollTimer=setInterval(()=>cloudPullLatest(),8000);cloudPullLatest()};
+queueCloudSave=function(){if(!cloudEnabled()||!ready)return;clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>{if(sig()!==storageGet(SYNC,''))cloudSaveNow()},$('exam').classList.contains('hidden')?1000:5000)};
+/* Sync heartbeat: every 5s pull remote changes, then push any unsynced local changes. */
+const syncBeat=async()=>{try{await cloudPullLatest()}catch(e){}try{if(cloudEnabled()&&ready&&!cloudBusy&&sig()!==storageGet(SYNC,''))cloudSaveNow()}catch(e){}};
+startCloudAutoSync=function(){if(!cloudEnabled())return;clearInterval(cloudPollTimer);cloudPollTimer=setInterval(syncBeat,5000);syncBeat()};
 window.addEventListener('online',()=>{if(cloudEnabled())pull(true)});   /* pull before any push */
 
 /* ---------- exam flow ---------- */
