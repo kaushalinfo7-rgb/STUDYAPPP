@@ -4438,7 +4438,7 @@ function planMergeData(L,R){
     const put=x=>{if(!x||!x.id||del[x.id])return;const o=m.get(x.id);if(!o){m.set(x.id,x);return}
       const a=t(o.u),c=t(x.u);m.set(x.id,a>c?o:c>a?x:(a===0?{...o,done:!!(o.done||x.done)}:o))};
     la.forEach(put);ra.forEach(put);
-    const remoteOrder=t(R.ordAt&&R.ordAt[d])>t(L.ordAt&&L.ordAt[d]),seq=remoteOrder?[...ra,...la]:[...la,...ra],seen=new Set(),out=[];
+    const remoteOrder=t(R.ordAt&&R.ordAt[d])>=t(L.ordAt&&L.ordAt[d]),seq=remoteOrder?[...ra,...la]:[...la,...ra],seen=new Set(),out=[];
     seq.forEach(x=>{const id=x&&x.id;if(id&&m.has(id)&&!seen.has(id)){seen.add(id);out.push(m.get(id))}});
     days[d]=out;
   });
@@ -5745,8 +5745,8 @@ const cleanAtt=a=>(Array.isArray(a)?a:[]).map(x=>({at:isNaN(Date.parse(x?.at))?n
 
 /* ---------- sync v3: upload gate, compare-and-swap, light polling, merge ---------- */
 writeLocalSnapshot=function(){};
-const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.questions=[];p.state={};p.startRemaining=0;p.attempts=cleanAtt(J(ATT,[]));p.studyTime=stLoad();return p};
-const sig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(STT_KEY,'')]));
+const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.questions=[];p.state={};p.startRemaining=0;p.attempts=cleanAtt(J(ATT,[]));p.studyTime=stLoad();p.deletedNotes=delNotes();return p};
+const sig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(STT_KEY,''),storageGet(DELN,'')]));
 cloudStatus=function(t){const e=$('cloudSyncText');if(e)e.textContent=t;document.querySelectorAll('.bank-cloud-pill,#notesSyncBadge').forEach(x=>x.textContent='☁ '+t)};
 function mergeObj(l,r,key,pick){const m=new Map();(l||[]).forEach(x=>x&&m.set(x[key],x));(r||[]).forEach(x=>{if(!x)return;const o=m.get(x[key]);m.set(x[key],o?pick(o,x):x)});return[...m.values()]}
 /* Completion records (focus-lottery done date, topic-test score) are written to a note WITHOUT changing updatedAt,
@@ -5763,7 +5763,22 @@ function noteMarks(base,other){
  if(t(other.lastReadAt)>t(base.lastReadAt))out.lastReadAt=other.lastReadAt;
  return out;
 }
+/* Deleted-note ids now travel with the cloud copy, so a deleted note can never come back from another device. */
+const DELN='cgpsc_deleted_note_ids_v1';
+function delNotes(){try{const a=JSON.parse(storageGet(DELN,'[]')||'[]');return Array.isArray(a)?a.map(String):[]}catch(e){return[]}}
+function mergeDeleted(remoteIds){
+ if(!Array.isArray(remoteIds)||!remoteIds.length)return;
+ const set=new Set(delNotes());let ch=false;remoteIds.forEach(i=>{i=String(i);if(!set.has(i)){set.add(i);ch=true}});
+ if(ch)storageSet(DELN,JSON.stringify([...set]));
+}
+function dropDeleted(){
+ const del=new Set(delNotes());if(!del.size)return;
+ const n=notesLoad();let ch=false;
+ Object.keys(n).forEach(k=>{if(!Array.isArray(n[k]))return;const f=n[k].filter(x=>!(x&&del.has(String(x.id))));if(f.length!==n[k].length){n[k]=f;ch=true}});
+ if(ch)storageSet(NOTES_KEY,JSON.stringify(n));
+}
 function union(remote){
+ mergeDeleted(remote.deletedNotes);
  const rb=migBank(remote.questionBanks||{}),lb=bankLoad(),b={};new Set([...Object.keys(lb),...Object.keys(rb)]).forEach(s=>b[s]=mergeObj(lb[s],rb[s],'id',o=>o));storageSet(QUESTION_BANKS_KEY,JSON.stringify(b));
  const ln=notesLoad(),rn=notesNormalize(remote.notes),n={};new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(s=>n[s]=mergeObj(ln[s],rn[s],'id',(a,c)=>{const cn=Date.parse(c.updatedAt||0)>Date.parse(a.updatedAt||0);return noteMarks(cn?c:a,cn?a:c)}));storageSet(NOTES_KEY,JSON.stringify(n));
  const t=getTrackerSnapshot(),rt=remote.tracker?.days||{};Object.entries(rt).forEach(([d,v])=>{if(!t.days[d]||Array.isArray(t.days[d]))t.days[d]=v;else if(v&&!Array.isArray(v))t.days[d]={...v,...t.days[d]}});storageSet(TRACKER_KEY,JSON.stringify(t));
@@ -5771,9 +5786,10 @@ function union(remote){
  storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),remote.plan)));
  storageSet(ATT,JSON.stringify(cleanAtt(mergeObj(J(ATT,[]),remote.attempts,'at',o=>o).sort((a,c)=>Date.parse(c.at)-Date.parse(a.at)))));
  if(remote.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),remote.studyTime)));
+ dropDeleted();
 }
-function takeRemote(r){if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(r.tracker));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)))}
-function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
+function takeRemote(r){mergeDeleted(r.deletedNotes);if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(r.tracker));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)));dropDeleted()}
+function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 applySnapshot=function(){return false};   /* never load another device's exam state */
 async function pull(full){
  if(!cloudEnabled()||pulling)return;pulling=true;
@@ -5798,17 +5814,20 @@ cloudSaveNow=async function(){
  if(!cloudEnabled()||!ready)return;if(cloudBusy){cloudQueued=true;return}
  cloudBusy=true;cloudStatus('Saving…');
  try{
-  const p=buildCloudPayload();p.updatedAt=new Date().toISOString();const ver=storageGet(VER,''),ep=cloudEndpoint(),h={...cloudHeaders(),Prefer:'return=representation'};let ok=false;
-  if(ver){const r=await fetch(ep+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body:JSON.stringify({payload:p,updated_at:p.updatedAt})});if(!r.ok)throw Error('save '+r.status);ok=(await r.json()).length>0}
-  else{const r=await fetch(ep,{method:'POST',headers:h,body:JSON.stringify({id:CLOUD_CONFIG.rowId,payload:p,updated_at:p.updatedAt})});if(r.status!==409){if(!r.ok)throw Error('save '+r.status);ok=true}}
-  if(ok){storageSet(VER,p.updatedAt);storageSet(SYNC,sig());cloudStatus('Synced just now')}
+  const p=buildCloudPayload();p.updatedAt=new Date().toISOString();const ver=storageGet(VER,''),ep=cloudEndpoint(),h={...cloudHeaders(),Prefer:'return=representation'};let ok=false,srvAt='';
+  if(ver){const r=await fetch(ep+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body:JSON.stringify({payload:p,updated_at:p.updatedAt})});if(!r.ok)throw Error('save '+r.status);const rr=await r.json();ok=rr.length>0;srvAt=(rr[0]&&rr[0].updated_at)||''}
+  else{const r=await fetch(ep,{method:'POST',headers:h,body:JSON.stringify({id:CLOUD_CONFIG.rowId,payload:p,updated_at:p.updatedAt})});if(r.status!==409){if(!r.ok)throw Error('save '+r.status);ok=true;try{const rr=await r.json();srvAt=(rr[0]&&rr[0].updated_at)||''}catch(e){}}}
+  if(ok){storageSet(VER,srvAt||p.updatedAt);storageSet(SYNC,sig());cloudStatus('Synced just now')}
   else{cloudBusy=false;await pull(true);cloudQueued=false;setTimeout(cloudSaveNow,200);return}
  }catch(e){cloudStatus('Offline — saved on this device');console.warn(e)}
  finally{cloudBusy=false;if(cloudQueued){cloudQueued=false;setTimeout(cloudSaveNow,300)}}
 };
 queueCloudSave=function(){if(!cloudEnabled()||!ready)return;clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>{if(sig()!==storageGet(SYNC,''))cloudSaveNow()},$('exam').classList.contains('hidden')?1000:5000)};
-/* Sync heartbeat: every 5s pull remote changes, then push any unsynced local changes. */
-const syncBeat=async()=>{try{await cloudPullLatest()}catch(e){}try{if(cloudEnabled()&&ready&&!cloudBusy&&sig()!==storageGet(SYNC,''))cloudSaveNow()}catch(e){}};
+/* Sync heartbeat: every 5s pull remote changes; retry the upload only if notes / banks / tracker / revision really have unsynced edits.
+   (Plan + study time sync through their own rows, so they must not trigger a full-payload upload.) */
+const msig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),revisionLoad(),storageGet(ATT,'')]));
+let okMain=null;
+const syncBeat=async()=>{try{await cloudPullLatest()}catch(e){}try{if(!cloudEnabled()||!ready||cloudBusy)return;const m=msig();if(okMain===null||sig()===storageGet(SYNC,'')){okMain=m;return}if(m!==okMain)cloudSaveNow()}catch(e){}};
 startCloudAutoSync=function(){if(!cloudEnabled())return;clearInterval(cloudPollTimer);cloudPollTimer=setInterval(syncBeat,5000);syncBeat()};
 window.addEventListener('online',()=>{if(cloudEnabled())pull(true)});   /* pull before any push */
 
