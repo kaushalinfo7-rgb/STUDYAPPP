@@ -26,20 +26,10 @@
   // FIX: 'cgpsc_cloud_snapshot_v1' used to be listed here, so the tiny local sync-timestamp stub was deleted on every
   // page load. The app then thought it had never synced, force-pulled the remote copy and wiped offline edits.
   const OBSOLETE_KEYS = [];
+  // Permanently retired study-duration logging keys. Remove them from every local store.
+  const REMOVED_TIME_KEYS = new Set(['cgpsc_study_time_v1','cgpsc_study_timer_v1','cgpsc_study_time_progress_period_v1','kaushal_note_focus_pending_v1','kaushal_note_read_pending_v1']);
+  REMOVED_TIME_KEYS.forEach(k => { try { rawRemove(k); } catch (_) {} });
 
-  // Study-time log must (a) always stay in real localStorage so it is readable synchronously on boot,
-  // and (b) be MERGED (not "longest string wins") when IndexedDB and localStorage disagree.
-  const STUDY_KEY = 'cgpsc_study_time_v1';
-  function mergeStudy(a, b) {
-    try {
-      const x = JSON.parse(a || '{}') || {}, y = JSON.parse(b || '{}') || {};
-      const del = Object.assign({}, x.del || {}, y.del || {}), m = new Map();
-      [].concat(x.sessions || [], y.sessions || []).forEach(s => { if (s && s.id && !del[s.id]) m.set(s.id, s); });
-      return JSON.stringify({ sessions: [...m.values()], del });
-    } catch (_) {
-      return String(a || '').length >= String(b || '').length ? a : b;
-    }
-  }
   OBSOLETE_KEYS.forEach(k => { try { rawRemove(k); } catch (_) {} });
 
   // FIX: per-key write timestamps (positive = written, negative = deleted). IndexedDB hydration used to
@@ -47,6 +37,7 @@
   const TS_KEY = '__kb_ts__';
   let tsMap = {};
   try { tsMap = JSON.parse(rawGet(TS_KEY) || '{}') || {}; } catch (_) { tsMap = {}; }
+  REMOVED_TIME_KEYS.forEach(k => { delete tsMap[k]; });
   // FIX: sync / study-plan code must wait until IndexedDB has hydrated (heavy notes/banks live only there).
   let hydrationDone = false;
   window.__kbDone = false;
@@ -132,6 +123,7 @@
 
   Storage.prototype.getItem = function(key) {
     if (this === localStorage) {
+      if (REMOVED_TIME_KEYS.has(String(key))) return null;
       return memCache.has(key) ? memCache.get(key) : rawGet(key);
     }
     return rawGet(key);
@@ -140,13 +132,14 @@
   Storage.prototype.setItem = function(key, value) {
     const strVal = String(value);
     if (this === localStorage) {
+      if (REMOVED_TIME_KEYS.has(String(key))) { memCache.delete(key); dirtyKeys.add(key); flushToIDB(key, null); try { rawRemove(key); } catch (_) {} touchTs(key, true); return; }
       memCache.set(key, strVal);
       if (key !== TS_KEY) dirtyKeys.add(key);
       flushToIDB(key, strVal);
       touchTs(key, false);
 
       // Keep small keys (< 25 KB) mirrored in localStorage; offload heavy banks/notes to IndexedDB
-      if (strVal.length < 25000 || key === STUDY_KEY) {
+      if (strVal.length < 25000) {
         try {
           rawSet(key, strVal);
         } catch (quotaErr) {
@@ -198,16 +191,10 @@
       if (cursor) {
         const k = cursor.key;
         const idbVal = cursor.value;
+        if (REMOVED_TIME_KEYS.has(String(k))) { store.delete(k); delete idbTs[k]; delete tsMap[k]; cursor.continue(); return; }
         const lt = tsMap[k] || 0, it = idbTs[k] || 0;
         if (k === TS_KEY) {
           // handled separately
-        } else if (k === STUDY_KEY) {
-          if (!memCache.has(k)) memCache.set(k, idbVal);
-          else {
-            const merged = mergeStudy(memCache.get(k), idbVal);
-            memCache.set(k, merged);
-            try { rawSet(k, merged); } catch (_) {}
-          }
         } else if (dirtyKeys.has(k) || pendingWrites.has(k)) {
           // FIX: modified/deleted in memory since boot -> memory is the newest copy and must not be overwritten.
           // Safety net: boot code that ran before hydration may have written an EMPTY placeholder ('{}', '[]') over data that
@@ -243,8 +230,9 @@
         }
         // Persist all current memCache items into IndexedDB and offload heavy items from raw localStorage
         memCache.forEach((val, key) => {
+          if (REMOVED_TIME_KEYS.has(String(key))) { store.delete(key); return; }
           store.put(val, key);
-          if (val && val.length >= 25000 && key !== STUDY_KEY) {
+          if (val && val.length >= 25000) {
             try { rawRemove(key); } catch (_) {}
           }
         });
@@ -3177,28 +3165,6 @@ body.theme-dark .bank-collapse-btn{background:transparent;color:inherit;border-c
 #start #cloudSyncStatus{display:none!important}
 </style>
 
-<style id="study-time-progress-report-css">
-.progress-stat-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
-.study-time-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
-.study-time-summary{background:var(--soft);border:1px solid var(--border);border-radius:14px;padding:14px}
-.study-time-summary small{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
-.study-time-summary b{display:block;color:var(--primary-dark);font-size:25px;line-height:1.2;margin-top:4px}
-.study-time-chart{height:220px;display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--border);padding:0 4px;overflow-x:auto}
-.study-time-column{height:100%;min-width:42px;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}
-.study-time-bar-wrap{height:165px;width:100%;display:flex;align-items:flex-end;justify-content:center}
-.study-time-bar{width:min(28px,70%);min-height:2px;border-radius:7px 7px 2px 2px;background:var(--primary)}
-.study-time-value{font-size:9px;color:var(--muted);height:12px}
-.study-time-label{font-size:9px;color:var(--muted);white-space:nowrap}
-.study-time-breakdown{display:grid;gap:8px;margin-top:14px}
-.study-time-breakdown-row{display:grid;grid-template-columns:minmax(90px,1fr) 1fr 60px;gap:10px;align-items:center;font-size:11px}
-.study-time-breakdown-row span:first-child{font-weight:700;color:var(--text)}
-.study-time-track{height:8px;background:var(--track);border-radius:99px;overflow:hidden}
-.study-time-track span{display:block;height:100%;background:var(--gold);border-radius:99px}
-@media(max-width:1100px){.progress-stat-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:700px){.study-time-summary-grid{grid-template-columns:1fr}.study-time-chart{height:205px}.study-time-column{min-width:36px}.study-time-bar-wrap{height:150px}.progress-stat-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:430px){.progress-stat-grid{grid-template-columns:1fr}}
-</style>
-
 <style id="organized-dashboard-actions">
 #start .study-nav-actions{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(145px,1fr))!important;align-items:stretch;gap:12px!important;margin:18px 0 22px}
 #start .study-nav-actions>a,#start .study-nav-actions>button{width:100%;min-width:0;min-height:48px;box-sizing:border-box;justify-content:center;white-space:normal;text-align:center}
@@ -3335,7 +3301,6 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
     <article><span class="cc-icon">▤</span><small>Saved notes</small><strong id="ccNotesCount">0</strong><em>Knowledge base</em></article>
     <article><span class="cc-icon">✓</span><small>Today's plan</small><strong id="ccPlanDone">0/0</strong><em>Topics completed</em></article>
     <article><span class="cc-icon">?</span><small>Questions today</small><strong id="ccQuestionsToday">0</strong><em>Practice solved</em></article>
-    <article><span class="cc-icon">◷</span><small>Study momentum</small><strong id="ccStudyMinutes">0m</strong><em>Logged today</em></article>
   </div>
   <div class="cc-footer"><span><i></i> Notes, revision and progress are connected</span><span>CGPSC · CONSISTENCY OVER CRAMMING</span></div>
 </section>
@@ -3503,18 +3468,6 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 .plan-drag:active{cursor:grabbing}
 .plan-topic-item.dragging{position:relative;z-index:5;background:var(--surface,#fff);box-shadow:0 8px 22px rgba(0,0,0,.2);transform:scale(1.01);opacity:.95}
 </style>
-<style id="studyTimeCss">
-.st-day-total{margin-left:auto;text-align:right}.st-day-total small{display:block;font-size:9px;letter-spacing:.14em;font-weight:900;color:var(--muted)}.st-day-total b{font-size:20px;color:var(--primary-dark)}
-.st-clock{font-variant-numeric:tabular-nums;font-size:clamp(40px,7vw,60px);font-weight:900;letter-spacing:-.02em;text-align:center;color:var(--primary-dark);margin:6px 0 14px}
-.st-row{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:9px;margin-bottom:11px}.st-row select,.st-row input,.st-manual input{height:44px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:inherit;padding:0 12px;font:inherit;min-width:0}
-.st-btns{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.st-btns .btn:disabled{opacity:.45;cursor:not-allowed}
-.st-manual{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);font-size:12px;color:var(--muted)}.st-manual input{width:110px}
-.st-msg{min-height:16px;margin:8px 0 0;font-size:12px;font-weight:700;color:var(--primary)}
-.st-log{display:grid;gap:8px;margin-top:6px}.st-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--soft)}.st-it-main{min-width:0}.st-it-main b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.st-it-main small{color:var(--muted);font-size:10px}
-.st-bars{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;height:96px;align-items:end}.st-bar{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:4px;cursor:pointer}.st-bar i{display:block;width:100%;max-width:26px;background:var(--primary);border-radius:6px 6px 2px 2px;opacity:.55}.st-bar.sel i{opacity:1}.st-bar span{font-size:10px;font-weight:800;color:var(--muted)}
-.st-subj{margin-top:12px;display:grid;gap:6px}.st-subj-row{display:flex;justify-content:space-between;gap:8px;font-size:12px}.st-subj-row span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:700px){.st-row{grid-template-columns:1fr}.st-item{grid-template-columns:minmax(0,1fr) auto auto}.st-item .plan-category-tag{display:none}}
-</style>
 <div aria-label="Daily study plan" class="screen hidden" id="planScreen">
 <div class="plan-dashboard">
 <header class="plan-header">
@@ -3539,15 +3492,6 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 </section>
 <div class="plan-layout">
 <main>
-<section class="plan-add-card" id="stCard">
-<div class="plan-add-title"><div class="plan-add-icon">⏱</div><div><h2>Study time tracker</h2><p id="stSub">Track how long you study.</p></div><div class="st-day-total"><small>STUDIED</small><b id="stDayTotal">0m</b></div></div>
-<div class="st-clock" id="stClock">00:00:00</div>
-<div class="st-row"><select aria-label="Subject" id="stCat"></select><input autocomplete="off" id="stTopic" list="stTopicList" maxlength="140" placeholder="Topic (optional)" type="text"/><datalist id="stTopicList"></datalist></div>
-<div class="st-btns"><button class="btn primary" id="stStart" type="button">▶ Start</button><button class="btn outline" id="stSave" type="button">Save session</button><button class="plan-text-btn" id="stDiscard" type="button">Discard</button></div>
-<div class="st-manual"><span>Forgot to start? Add time manually:</span><input id="stMin" max="1440" min="1" placeholder="Minutes" type="number"/><button class="btn outline" id="stAddManual" type="button">Add</button></div>
-<p class="st-msg" id="stMsg"></p>
-<div class="st-log" id="stLog"></div>
-</section>
 <section class="plan-add-card">
 <div class="plan-add-title">
 <div class="plan-add-icon">+</div>
@@ -3594,11 +3538,6 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 <div class="plan-progress-number"><b id="planDoneCount">0</b><span>/ <span id="planTotalCount">0</span></span></div>
 <div class="plan-progress-track"><span id="planProgressBar"></span></div>
 <p id="planProgressText">Nothing planned yet.</p>
-</section>
-<section class="plan-calendar-card">
-<div class="plan-side-head"><h3>Study time · week</h3><span id="stWeekTotal">0m</span></div>
-<div class="st-bars" id="stBars"></div>
-<div class="st-subj" id="stSubj"></div>
 </section>
 <section class="plan-calendar-card">
 <div class="plan-side-head"><h3>Upcoming</h3><span>7 days</span></div>
@@ -3713,25 +3652,6 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 <div class="progress-stat-card"><span class="ps-icon">↗</span><div><small>This week</small><b id="progressWeekSolved">0</b><em id="progressWeekDelta">Questions solved</em></div></div>
 <div class="progress-stat-card"><span class="ps-icon">◷</span><div><small>Current streak</small><b id="progressStreak">0 days</b><em id="progressStreakHint">Keep solving daily</em></div></div>
 <div class="progress-stat-card"><span class="ps-icon">!</span><div><small>Revision queue</small><b id="progressRevisionCount">0</b><em id="progressRevisionHint">Wrong answers to revisit</em></div></div>
-<div class="progress-stat-card"><span class="ps-icon">◷</span><div><small>Study time</small><b id="progressStudyTime">0m</b><em id="progressStudyTimeHint">All logged sessions</em></div></div>
-</section>
-<section class="progress-section-card progress-study-time">
-<div class="progress-section-head">
-<div><h2>Study time report</h2><p>Combined study time from the Plan timer, manual Plan entries, and the Notes Focus Lottery timer.</p></div>
-<div class="progress-period-tabs">
-<button class="progress-period study-time-period active" data-study-period="daily" type="button">Daily</button>
-<button class="progress-period study-time-period" data-study-period="weekly" type="button">Weekly</button>
-<button class="progress-period study-time-period" data-study-period="monthly" type="button">Monthly</button>
-</div>
-</div>
-<div class="study-time-summary-grid">
-<div class="study-time-summary"><small>Today</small><b id="studyTimeToday">0m</b></div>
-<div class="study-time-summary"><small>This week</small><b id="studyTimeWeek">0m</b></div>
-<div class="study-time-summary"><small>This month</small><b id="studyTimeMonth">0m</b></div>
-</div>
-<div class="progress-chart-meta"><b id="studyTimeChartTitle">Last 14 days</b><span id="studyTimeChartTotal">0m</span></div>
-<div class="study-time-chart" id="studyTimeChart"></div>
-<div class="study-time-breakdown" id="studyTimeBreakdown"></div>
 </section>
 <section class="progress-section-card progress-activity">
 <div class="progress-section-head">
@@ -4049,7 +3969,7 @@ function cloudHeaders(){return {'apikey':CLOUD_CONFIG.anonKey,'Authorization':'B
 function cloudEndpoint(){return CLOUD_CONFIG.url.replace(/\/$/,'')+'/rest/v1/'+encodeURIComponent(CLOUD_CONFIG.table)}
 function getTrackerSnapshot(){try{return JSON.parse(localStorage.getItem(TRACKER_KEY)||'{"days":{}}')}catch(e){return {days:{}}}}
 function getFlashcardReviews(){try{return JSON.parse(localStorage.getItem('cgpsc_flashcard_reviews_v1')||'{}')}catch(e){return {}}}
-function buildCloudPayload(){return {version:3,updatedAt:new Date().toISOString(),questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining,tracker:getTrackerSnapshot(),revision:revisionMerge(App.revision,revisionLoad()),plan:planLoad(),studyTime:stLoad(),flashcardReviews:getFlashcardReviews(),theme:localStorage.getItem('cgpsc_theme')||'day'}}
+function buildCloudPayload(){return {version:3,updatedAt:new Date().toISOString(),questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining,tracker:getTrackerSnapshot(),revision:revisionMerge(App.revision,revisionLoad()),plan:planLoad(),flashcardReviews:getFlashcardReviews(),theme:localStorage.getItem('cgpsc_theme')||'day'}}
 /* FIX: the full cloud payload used to be duplicated here (questions, revision, plan, tracker...). Supabase already holds it, so only a tiny timestamp stub is kept locally for sync comparison. */
 function writeLocalSnapshot(payload){try{const stub=JSON.stringify({updatedAt:(payload&&payload.updatedAt)||new Date().toISOString()});try{localStorage.removeItem(CLOUD_LOCAL_KEY)}catch(_){}localStorage.setItem(CLOUD_LOCAL_KEY,stub)}catch(e){}}
 function readLocalSnapshot(){try{return JSON.parse(localStorage.getItem(CLOUD_LOCAL_KEY)||'null')}catch(e){return null}}
@@ -4082,7 +4002,7 @@ async function cloudLoad(){
     const rows=await r.json();
     let remote=rows?.[0]?.payload||null;
      if(remote){
-       /* FIX: MERGE every global collection (revision, plan, study time, banks, notes, tracker...) instead of overwriting local data */
+       /* FIX: MERGE global collections (revision, plan, banks, notes, tracker...) instead of overwriting local data */
        try{applyGlobalData(remote)}catch(e){console.warn('Cloud data merge failed:',e)}
        writeLocalSnapshot(remote);cloudStatus('Synced just now','ok');
      } else cloudStatus('Cloud record empty — local backup active','ok');
@@ -4205,7 +4125,6 @@ function applyGlobalData(saved){
   if(!saved||typeof saved!=='object')return;
   const S2=(name,f)=>{try{f()}catch(e){console.warn('Sync: could not merge '+name,e)}};
   S2('deleted notes',()=>{if(Array.isArray(saved.deletedNotes)&&saved.deletedNotes.length){const k='cgpsc_deleted_note_ids_v1',set=new Set((_readJSON(k,[])||[]).map(String));saved.deletedNotes.forEach(i=>set.add(String(i)));storageSet(k,JSON.stringify([...set]))}});
-  S2('study time',()=>{if(saved.studyTime&&typeof saved.studyTime==='object')storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),saved.studyTime)))});
   S2('daily plan',()=>{if(saved.plan&&saved.plan.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),saved.plan)))});
   S2('question banks',()=>{if(_isObj(saved.questionBanks))storageSet(QUESTION_BANKS_KEY,JSON.stringify(bankMerge(bankLoad(),saved.questionBanks,_readJSON('cgpsc_bank_base_ids_v1',null))))});
   S2('notes',()=>{if(_isObj(saved.notes)){const del=(_readJSON('cgpsc_deleted_note_ids_v1',[])||[]);storageSet(NOTES_KEY,JSON.stringify(notesMerge(notesLoad(),saved.notes,del)))}});
@@ -4545,26 +4464,6 @@ function progressRenderFiveDay(){
   $('progressFiveDayAccuracy').textContent=acc+'%';
   $('progressFiveDayActive').textContent=summary.active;
 }
-const STUDY_TIME_PROGRESS_PERIOD_KEY='cgpsc_study_time_progress_period_v1';
-let studyTimeProgressPeriod=storageGet(STUDY_TIME_PROGRESS_PERIOD_KEY,'daily')||'daily';
-function studyTimeFmt(sec){sec=Math.max(0,Math.round(sec||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return h?`${h}h ${m}m`:m?`${m}m`:`${sec}s`}
-function studyTimeRangeSum(start,end){const d=stLoad(),a=new Date(start.getFullYear(),start.getMonth(),start.getDate()),b=new Date(end.getFullYear(),end.getMonth(),end.getDate());return d.sessions.filter(s=>{const x=new Date(String(s.date)+'T00:00:00');return x>=a&&x<=b}).reduce((n,s)=>n+(Number(s.secs)||0),0)}
-function studyTimeDaySum(date){const k=trackerDate(date),d=stLoad();return d.sessions.filter(s=>s.date===k).reduce((n,s)=>n+(Number(s.secs)||0),0)}
-function studyTimeSeries(){const now=new Date(),out=[];if(studyTimeProgressPeriod==='daily'){for(let i=13;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);out.push({label:i===0?'Today':d.toLocaleDateString(undefined,{day:'numeric',month:'short'}),secs:studyTimeDaySum(d)})}}else if(studyTimeProgressPeriod==='weekly'){const ws=trackerStartOfWeek(now);for(let i=8;i>=0;i--){const start=new Date(ws);start.setDate(start.getDate()-i*7);const end=new Date(start);end.setDate(end.getDate()+6);out.push({label:i===0?'This week':start.toLocaleDateString(undefined,{day:'numeric',month:'short'}),secs:studyTimeRangeSum(start,end)})}}else{for(let i=5;i>=0;i--){const start=new Date(now.getFullYear(),now.getMonth()-i,1),end=new Date(now.getFullYear(),now.getMonth()-i+1,0);out.push({label:start.toLocaleDateString(undefined,{month:'short'}),secs:studyTimeRangeSum(start,end)})}}return out}
-function progressRenderStudyTime(){
- const sessions=stLoad().sessions,all=sessions.reduce((n,s)=>n+(Number(s.secs)||0),0),now=new Date();
- const today=studyTimeDaySum(now),weekStart=trackerStartOfWeek(now),week=studyTimeRangeSum(weekStart,now),month=studyTimeRangeSum(new Date(now.getFullYear(),now.getMonth(),1),now);
- $('progressStudyTime').textContent=studyTimeFmt(all);$('progressStudyTimeHint').textContent=`${sessions.length} logged session${sessions.length===1?'':'s'}`;
- $('studyTimeToday').textContent=studyTimeFmt(today);$('studyTimeWeek').textContent=studyTimeFmt(week);$('studyTimeMonth').textContent=studyTimeFmt(month);
- const series=studyTimeSeries(),max=Math.max(1,...series.map(x=>x.secs));
- $('studyTimeChartTitle').textContent=studyTimeProgressPeriod==='daily'?'Last 14 days':studyTimeProgressPeriod==='weekly'?'Last 9 weeks':'Last 6 months';
- $('studyTimeChartTotal').textContent=studyTimeFmt(series.reduce((n,x)=>n+x.secs,0));
- $('studyTimeChart').innerHTML=series.map(x=>`<div class="study-time-column" title="${esc(x.label+': '+studyTimeFmt(x.secs))}"><div class="study-time-value">${x.secs?studyTimeFmt(x.secs):'0m'}</div><div class="study-time-bar-wrap"><div class="study-time-bar" style="height:${x.secs?Math.max(3,Math.round(x.secs/max*100)):2}%"></div></div><div class="study-time-label">${esc(x.label)}</div></div>`).join('');
- const baseStart=studyTimeProgressPeriod==='monthly'?new Date(now.getFullYear(),now.getMonth(),1):studyTimeProgressPeriod==='weekly'?trackerStartOfWeek(now):new Date(now.getFullYear(),now.getMonth(),now.getDate());
- const by={};sessions.forEach(s=>{const dt=new Date(String(s.date)+'T00:00:00');if(dt>=baseStart&&dt<=now){const k=s.cat||'General';by[k]=(by[k]||0)+(Number(s.secs)||0)}});
- const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,6),mx=rows[0]?.[1]||1;
- $('studyTimeBreakdown').innerHTML=rows.length?rows.map(([k,v])=>`<div class="study-time-breakdown-row"><span>${esc(k)}</span><div class="study-time-track"><span style="width:${Math.max(3,Math.round(v/mx*100))}%"></span></div><b>${studyTimeFmt(v)}</b></div>`).join(''):'<div class="progress-empty">No study time logged for this period yet.</div>';
-}
 function progressRenderDashboard(){
   const all=progressAllTimeStats(),weekStart=trackerStartOfWeek(new Date()),week=trackerSumRange(weekStart,new Date()),revision=revisionMerge(App.revision,revisionLoad());
   const accuracy=all.solved?Math.round(all.correct/all.solved*100):0;
@@ -4584,7 +4483,7 @@ function progressRenderDashboard(){
   const streak=progressStreak();$('progressStreak').textContent=`${streak} day${streak===1?'':'s'}`;$('progressStreakHint').textContent=streak?'Keep the streak going':'Solve a question today';
   $('progressRevisionCount').textContent=revision.length;
   $('progressRevisionHint').textContent=revision.length?'Wrong answers to revisit':'Revision queue is clear';
-  progressRenderBigChart();progressRenderFiveDay();progressRenderStudyTime();progressRenderPerformance();progressRenderConsistency();progressRenderTopics();progressRenderAttention();progressRenderRecent();
+  progressRenderBigChart();progressRenderFiveDay();progressRenderPerformance();progressRenderConsistency();progressRenderTopics();progressRenderAttention();progressRenderRecent();
 }
 function progressOpenDashboard(){setActiveView('progress');trackerSetOpen(false);$('start').classList.add('hidden');$('revisionScreen').classList.add('hidden');$('planScreen').classList.add('hidden');$('studyHubScreen').classList.add('hidden');$('progressScreen').classList.remove('hidden');window.scrollTo(0,0);progressRenderDashboard()}
 function progressCloseDashboard(){setActiveView('home');$('progressScreen').classList.add('hidden');$('start').classList.remove('hidden');window.scrollTo(0,0);trackerRender()}
@@ -4748,63 +4647,6 @@ function planRender(){
   planRenderList();planRenderUpcoming();planRenderStats();
 }
 
-/* ---------- STUDY TIME TRACKER (synced with cloud payload as "studyTime") ---------- */
-const STT_KEY='cgpsc_study_time_v1',STT_TIMER='cgpsc_study_timer_v1';
-function stLoad(){try{const x=JSON.parse(storageGet(STT_KEY,'')||'{}');return{sessions:Array.isArray(x.sessions)?x.sessions:[],del:x.del&&typeof x.del==='object'?x.del:{}}}catch(e){return{sessions:[],del:{}}}}
-function stSave(d){storageSet(STT_KEY,JSON.stringify(d));queueCloudSave()}
-function stMerge(a,b){a=a||{};b=b||{};const del={...(a.del||{}),...(b.del||{})},m=new Map();[...(a.sessions||[]),...(b.sessions||[])].forEach(s=>{if(s&&s.id&&!del[s.id]){const o=m.get(s.id);if(!o||(Number(s.secs)||0)>=(Number(o.secs)||0))m.set(s.id,s)}});return{sessions:[...m.values()],del}}
-let stT={run:false,since:0,acc:0},stInited=false,stTick=null,stMsgT=null;
-const stTSave=()=>storageSet(STT_TIMER,JSON.stringify(stT));
-const stElapsed=()=>stT.acc+(stT.run?Date.now()-stT.since:0);
-function stFmt(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+'h '+m+'m':m?m+'m':s+'s'}
-function stPaintClock(){const e=$('stClock');if(!e)return;const s=Math.floor(stElapsed()/1000),p=n=>String(n).padStart(2,'0');e.textContent=p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60);if($('stSave'))$('stSave').disabled=s<10}
-function stMsg(t){const e=$('stMsg');e.textContent=t;clearTimeout(stMsgT);stMsgT=setTimeout(()=>e.textContent='',2600)}
-function stAdd(o){const d=stLoad();const cat=o.cat!==undefined?String(o.cat||'General'):($('stCat')?.value||'General');const topic=o.topic!==undefined?String(o.topic||''):($('stTopic')?.value.trim()||'');d.sessions.push({id:'s_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:o.date||trackerDate(new Date()),secs:Math.max(0,Math.floor(o.secs||0)),cat,topic,at:new Date().toISOString(),src:o.src||'timer',...(o.nid?{nid:String(o.nid)}:{})});stSave(d);return d.sessions[d.sessions.length-1]}
-/* Notes time is logged only after a note has been open for at least 2 minutes (120s).
-   Shorter focus segments are held in memory per note and logged once the total reaches 2 minutes. */
-const NOTE_MIN_LOG_SECS=120,NOTE_PEND_KEY='kaushal_note_focus_pending_v1';
-let notePendingSecs={};try{notePendingSecs=JSON.parse(storageGet(NOTE_PEND_KEY,'')||'{}')||{}}catch(e){notePendingSecs={}}
-const notePendSave=()=>{try{storageSet(NOTE_PEND_KEY,JSON.stringify(notePendingSecs))}catch(e){}};
-window.kaushalLogStudyTime=function(secs,o={}){secs=Math.floor(Number(secs)||0);if(secs<1)return null;
-if(o.src==='notes-focus'){const k=(o.cat||'')+'|'+(o.topic||'');const total=(notePendingSecs[k]||0)+secs;if(total<NOTE_MIN_LOG_SECS){notePendingSecs[k]=total;notePendSave();return null}delete notePendingSecs[k];notePendSave();secs=total}
-if((o.src||'notes')==='notes'&&o.nid){const d=stLoad(),dt=o.date||trackerDate(new Date()),ex=d.sessions.find(x=>x.src==='notes'&&x.nid===String(o.nid)&&x.date===dt);
- if(ex){ex.secs=(Number(ex.secs)||0)+secs;ex.at=new Date().toISOString();stSave(d);return ex}}
-return stAdd({secs,date:o.date||trackerDate(new Date()),cat:o.cat||'General',topic:o.topic||'',src:o.src||'notes',nid:o.nid})};
-function stDelete(id){const d=stLoad();d.sessions=d.sessions.filter(s=>s.id!==id);d.del[id]=new Date().toISOString();stSave(d);stRender()}
-function stInit(){
- if(stInited)return;stInited=true;
- try{stT=JSON.parse(storageGet(STT_TIMER,'')||'null')||stT}catch(e){}
- const c=$('stCat');c.innerHTML='<option value="">General / Other</option>'+[...$('planCategory').options].filter(o=>o.value).map(o=>`<option value="${esc(o.value)}">${esc(o.textContent)}</option>`).join('');
- if(stT.cat)c.value=stT.cat;if(stT.topic)$('stTopic').value=stT.topic;
- $('stStart').onclick=()=>{const now=Date.now();if(stT.run)stT={...stT,run:false,acc:stT.acc+now-stT.since,since:0};else stT={...stT,run:true,since:now,date:stT.acc?stT.date:trackerDate(new Date())};stT.cat=c.value;stT.topic=$('stTopic').value.trim();stTSave();stRender()};
- $('stSave').onclick=()=>{const secs=Math.floor(stElapsed()/1000);if(secs<10){stMsg('Session too short to save.');return}stAdd({date:stT.date||trackerDate(new Date()),secs,src:'timer'});stT={run:false,since:0,acc:0};stTSave();$('stTopic').value='';stMsg('Saved '+stFmt(secs)+' ✓');stRender()};
- $('stDiscard').onclick=()=>{if(!confirm('Discard the current timer without saving?'))return;stT={run:false,since:0,acc:0};stTSave();stRender()};
- const man=()=>{const m=parseInt($('stMin').value);if(!(m>=1&&m<=1440)){stMsg('Enter minutes between 1 and 1440.');return}stAdd({date:planSelectedDate,secs:m*60,src:'manual'});$('stMin').value='';stMsg('Added '+stFmt(m*60)+' ✓');stRender()};
- $('stAddManual').onclick=man;$('stMin').onkeydown=e=>{if(e.key==='Enter')man()};
- c.onchange=$('stTopic').onchange=()=>{stT.cat=c.value;stT.topic=$('stTopic').value.trim();stTSave()};
-}
-function stRender(){
- stInit();
- const d=stLoad(),day=d.sessions.filter(s=>s.date===planSelectedDate).sort((a,b)=>(a.at||'')<(b.at||'')?-1:1),today=trackerDate(new Date());
- $('stDayTotal').textContent=stFmt(day.reduce((n,s)=>n+s.secs,0));
- $('stSub').textContent=planSelectedDate===today?"Track today's study hours":'Viewing '+planDateObj().toLocaleDateString(undefined,{day:'numeric',month:'short'})+' — the timer always logs to today';
- $('stStart').textContent=stT.run?'⏸ Pause':stT.acc?'▶ Resume':'▶ Start';
- $('stDiscard').style.display=stElapsed()>0?'':'none';
- $('stTopicList').innerHTML=planItems().map(x=>`<option value="${esc(x.text)}"></option>`).join('');
- stPaintClock();clearInterval(stTick);if(stT.run)stTick=setInterval(stPaintClock,1000);
- const log=$('stLog');
- log.innerHTML=day.length?day.map(s=>`<div class="st-item"><span class="plan-category-tag">${esc(s.cat||'General')}</span><div class="st-it-main"><b>${esc(s.topic||'Study session')}</b><small>${s.src==='manual'?'Added manually':new Date(s.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</small></div><strong>${stFmt(s.secs)}</strong><button class="plan-icon-btn" type="button" data-st-del="${esc(s.id)}" title="Delete">×</button></div>`).join(''):'<div class="plan-empty"><strong>No study time logged for this day</strong>Start the timer or add minutes manually.</div>';
- log.querySelectorAll('[data-st-del]').forEach(b=>b.onclick=()=>stDelete(b.dataset.stDel));
- const ws=trackerStartOfWeek(planDateObj()),sums=[],by={};
- for(let i=0;i<7;i++){const k=trackerDate(new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()+i));let n=0;d.sessions.forEach(s=>{if(s.date===k){n+=s.secs;const c=s.cat||'General';by[c]=(by[c]||0)+s.secs}});sums.push([k,n])}
- const mx=Math.max(1,...sums.map(x=>x[1]));
- $('stWeekTotal').textContent=stFmt(sums.reduce((n,x)=>n+x[1],0));
- $('stBars').innerHTML=sums.map(([k,n])=>{const[y,m,dd]=k.split('-').map(Number);return`<div class="st-bar ${k===planSelectedDate?'sel':''}" data-st-date="${k}" title="${stFmt(n)}"><i style="height:${n?Math.max(6,Math.round(n/mx*80)):0}%"></i><span>${new Date(y,m-1,dd).toLocaleDateString(undefined,{weekday:'narrow'})}</span></div>`}).join('');
- $('stBars').querySelectorAll('[data-st-date]').forEach(b=>b.onclick=()=>planOpen(b.dataset.stDate));
- const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,5);
- $('stSubj').innerHTML=rows.length?rows.map(([k,v])=>`<div class="st-subj-row"><span>${esc(k)}</span><b>${stFmt(v)}</b></div>`).join(''):'<div class="plan-empty">No study time this week yet.</div>';
-}
-const _stPlanRender=planRender;planRender=function(){_stPlanRender();try{stRender()}catch(e){console.warn('study time:',e)}};
 /* ---------- SAFE STORAGE LAYER ---------- */
 const SAFE_STORAGE_MEMORY={};
 function storageGet(key,fallback=null){
@@ -5793,7 +5635,7 @@ Generate strictly according to these instructions. Perform a final JSON syntax c
 .command-center{margin:0 0 28px;padding:24px;border-radius:22px;background:linear-gradient(130deg,#07383c,#0c555a 65%,#146c6e);color:#f8fbf7;box-shadow:0 16px 34px #083d401b;position:relative;overflow:hidden}
 .command-center:after{content:"";position:absolute;width:260px;height:260px;border:1px solid #ffffff18;border-radius:50%;right:-90px;top:-125px;box-shadow:0 0 0 30px #ffffff08,0 0 0 65px #ffffff05;pointer-events:none}
 .cc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;position:relative;z-index:1}.cc-kicker,.sn-kicker{font-size:10px;letter-spacing:.16em;font-weight:950;color:#f2cc78}.cc-top h2{font-size:clamp(23px,2.2vw,32px);letter-spacing:-.04em;line-height:1.15;margin:5px 0;color:white}.cc-top p{margin:0;color:#d3e7e2;font-size:13px}.cc-date{padding:8px 11px;border:1px solid #ffffff36;border-radius:99px;color:#f4d995;font-size:9px;font-weight:900;white-space:nowrap}
-.cc-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:22px 0 14px;position:relative;z-index:1}.cc-metrics article{padding:14px;border-radius:15px;border:1px solid #ffffff20;background:#ffffff0e;min-width:0}.cc-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#f2cc7824;color:#ffdb8c;font-size:19px;margin-bottom:12px}.cc-metrics small,.cc-metrics em{display:block;color:#d1e5e0;font-size:10px;font-style:normal}.cc-metrics strong{display:block;color:#fff;font-size:27px;line-height:1.2;margin:4px 0}.cc-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;position:relative;z-index:1}.cc-actions button{display:flex;align-items:center;gap:9px;text-align:left;padding:12px;border-radius:12px;background:#f9f8ef;color:#12474a;font-weight:850;font-size:12px;min-width:0}.cc-actions button:hover{transform:translateY(-2px);box-shadow:0 7px 18px #001f2029}.cc-actions button span{flex:1}.cc-actions button b{font-size:17px}.cc-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid #ffffff25;padding-top:13px;margin-top:17px;color:#cce2dc;font-size:9px;letter-spacing:.05em}.cc-footer i{display:inline-block;width:7px;height:7px;background:#8ed8ad;border-radius:50%;margin-right:6px}
+.cc-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:22px 0 14px;position:relative;z-index:1}.cc-metrics article{padding:14px;border-radius:15px;border:1px solid #ffffff20;background:#ffffff0e;min-width:0}.cc-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#f2cc7824;color:#ffdb8c;font-size:19px;margin-bottom:12px}.cc-metrics small,.cc-metrics em{display:block;color:#d1e5e0;font-size:10px;font-style:normal}.cc-metrics strong{display:block;color:#fff;font-size:27px;line-height:1.2;margin:4px 0}.cc-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;position:relative;z-index:1}.cc-actions button{display:flex;align-items:center;gap:9px;text-align:left;padding:12px;border-radius:12px;background:#f9f8ef;color:#12474a;font-weight:850;font-size:12px;min-width:0}.cc-actions button:hover{transform:translateY(-2px);box-shadow:0 7px 18px #001f2029}.cc-actions button span{flex:1}.cc-actions button b{font-size:17px}.cc-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid #ffffff25;padding-top:13px;margin-top:17px;color:#cce2dc;font-size:9px;letter-spacing:.05em}.cc-footer i{display:inline-block;width:7px;height:7px;background:#8ed8ad;border-radius:50%;margin-right:6px}
 .smart-notes-panel{margin:20px 0 24px;padding:20px;border:1px solid var(--border);border-radius:20px;background:var(--surface);box-shadow:var(--shadow);color:var(--text)}.sn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px}.sn-head h2{margin:4px 0;font-size:24px;letter-spacing:-.03em;color:var(--primary-dark)}.sn-head p{margin:0;color:var(--muted);font-size:12px}.sn-kicker{color:#a27b28}.sn-search-wrap{display:flex;align-items:center;gap:8px;width:min(340px,100%);padding:0 12px;border:1px solid var(--border);border-radius:12px;background:var(--soft);color:var(--muted)}.sn-search-wrap span{font-size:22px}.sn-search-wrap input{width:100%;min-width:0;height:42px;border:0!important;outline:none;background:transparent!important;color:var(--text)!important;font-size:12px}.sn-filter-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0 12px}.sn-status-tabs{display:flex;gap:6px;flex-wrap:wrap}.sn-status-tabs button{border:1px solid var(--border);border-radius:99px;padding:8px 11px;background:var(--soft);color:var(--text);font-size:10px;font-weight:850}.sn-status-tabs button.active{background:var(--primary-dark);color:white;border-color:var(--primary-dark)}.sn-status-tabs b{margin-left:4px}.sn-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.sn-note{border:1px solid var(--border);border-radius:13px;padding:13px;min-width:0;background:var(--soft)}.sn-note-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.sn-note h3{font-size:13px;line-height:1.4;margin:0;color:var(--text);overflow-wrap:anywhere}.sn-note-sub{font-size:10px;color:var(--muted);margin-top:4px}.sn-pill{display:inline-flex;padding:4px 7px;border-radius:99px;background:#e5efeb;color:#245e53;font-size:9px;font-weight:900;white-space:nowrap}.sn-pill.due{background:#fff0d0;color:#865c12}.sn-note-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:12px}.sn-note-actions button{border:1px solid var(--border);border-radius:8px;padding:7px 9px;background:var(--surface);color:var(--primary-dark);font-size:10px;font-weight:850}.sn-note-actions .sn-open{background:var(--primary);border-color:var(--primary);color:#fff}.sn-note-actions select{max-width:125px;padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:10px;color:var(--text)}.sn-empty{grid-column:1/-1;text-align:center;padding:24px;border:1px dashed var(--border);border-radius:12px;color:var(--muted);font-size:12px}.sn-footnote{margin-top:12px;color:var(--muted);font-size:10px}
 .sn-modal{position:fixed;inset:0;z-index:3000;background:#082e32b8;display:flex;align-items:center;justify-content:center;padding:18px}.sn-modal.hidden{display:none!important}.sn-modal-box{width:min(650px,100%);max-height:90vh;overflow:auto;background:var(--surface);color:var(--text);border-radius:20px;padding:22px;box-shadow:0 25px 80px #001c1f55}.sn-modal-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.sn-modal-head h2{margin:4px 0;font-size:23px}.sn-modal-head p{margin:0;color:var(--muted);font-size:12px}.sn-modal-head>button{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--soft);color:var(--text);font-size:24px}.sn-modal-box label{display:block;font-size:12px;font-weight:850;margin:12px 0;color:var(--text)}.sn-modal-box textarea{display:block;min-height:65px;width:100%;box-sizing:border-box;margin-top:6px;padding:10px;border:1px solid var(--border)!important;border-radius:10px;background:var(--soft)!important;color:var(--text)!important;font:inherit;font-size:12px;resize:vertical}.sn-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 @media(max-width:700px){.cc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.cc-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.cc-top{flex-direction:column}.cc-date{display:none}.command-center{padding:18px}.sn-head{flex-direction:column}.sn-search-wrap{width:100%;box-sizing:border-box}.sn-list{grid-template-columns:1fr}.smart-notes-panel{padding:14px}.sn-filter-row #snResumeBtn{width:100%}}
@@ -5891,7 +5733,7 @@ const box=$('studyHubRefreshBtn').parentNode,mk=(t,f)=>{const b=document.createE
 const fi=document.createElement('input');fi.type='file';fi.accept='.json';fi.hidden=true;document.body.appendChild(fi);
 fi.id='kaushalBackupFile';fi.onchange=()=>{const f=fi.files[0];fi.value='';if(f){if(typeof window.__kbRestore==='function')window.__kbRestore(f);else toast('⚠ Restore is not ready yet — please reload the page.')}};
 /* ---- backup helpers (shared by Export + Restore) ---- */
-const KB_EXCLUDE=new Set(['cgpsc_cloud_snapshot_v1','cgpsc_srv_ver_v3','cgpsc_sync_sig_v1','cgpsc_sync_sig_v3','cgpsc_force_push_v3','cgpsc_mig_v3','cgpsc_last_edit_v1','cgpsc_mock_v2','cgpsc_hall_session_v1','cgpsc_study_timer_v1','cgpsc_notes_focus_timer_v1','cgpsc_notes_focus_timer_v2','cgpsc_active_view_v1','cgpsc_topic_quiz_pending_v1','cgpsc_sync_data_sig_v3','cgpsc_bank_base_ids_v1','cgpsc_plan_srv_ver_v1','cgpsc_study_srv_ver_v1']);
+const KB_EXCLUDE=new Set(['cgpsc_cloud_snapshot_v1','cgpsc_srv_ver_v3','cgpsc_sync_sig_v1','cgpsc_sync_sig_v3','cgpsc_force_push_v3','cgpsc_mig_v3','cgpsc_last_edit_v1','cgpsc_mock_v2','cgpsc_hall_session_v1','cgpsc_study_time_v1','cgpsc_study_timer_v1','cgpsc_study_time_progress_period_v1','kaushal_note_focus_pending_v1','kaushal_note_read_pending_v1','cgpsc_notes_focus_timer_v1','cgpsc_notes_focus_timer_v2','cgpsc_active_view_v1','cgpsc_topic_quiz_pending_v1','cgpsc_sync_data_sig_v3','cgpsc_bank_base_ids_v1','cgpsc_plan_srv_ver_v1','cgpsc_study_srv_ver_v1']);
 window.__kbIsData=k=>typeof k==='string'&&(k.startsWith('cgpsc_')||k.startsWith('kaushal_'))&&!KB_EXCLUDE.has(k);
 window.__kbCollect=()=>{const data={};let mem=0;try{const ks=new Set(window.__kbKeys?window.__kbKeys():[]);for(let i=0;i<localStorage.length;i++)ks.add(localStorage.key(i));ks.forEach(k=>{if(window.__kbIsData(k)){const v=localStorage.getItem(k);if(v!==null)data[k]=v}})}catch(e){console.warn('backup: localStorage unreadable',e)}   /* FIX: heavy keys (notes, question banks) are not in raw localStorage */
 try{if(typeof SAFE_STORAGE_MEMORY==='object')Object.keys(SAFE_STORAGE_MEMORY).forEach(k=>{if(window.__kbIsData(k)){data[k]=String(SAFE_STORAGE_MEMORY[k]);mem++}})}catch(e){}
@@ -5937,9 +5779,9 @@ const cleanAtt=a=>(Array.isArray(a)?a:[]).map(x=>({at:isNaN(Date.parse(x?.at))?n
 
 /* ---------- sync v3: upload gate, compare-and-swap, light polling, merge ---------- */
 writeLocalSnapshot=function(){};
-const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.questions=[];p.state={};p.startRemaining=0;p.attempts=cleanAtt(J(ATT,[]));p.studyTime=stLoad();p.deletedNotes=delNotes();return p};
-const sig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(STT_KEY,''),storageGet(DELN,'')]));
-/* FIX: plan + study time sync through their own rows and never update SYNC, so they made sig() look "unsynced" forever and forced the
+const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.questions=[];p.state={};p.startRemaining=0;p.attempts=cleanAtt(J(ATT,[]));p.deletedNotes=delNotes();return p};
+const sig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(DELN,'')]));
+/* FIX: the Plan sync uses its own row and never updates SYNC, so it must not make sig() look unsynced forever and force the
    merge-only union() path (deleted questions came back). The union/take decision now uses sigData() (main-row data only). */
 const SYNCD='cgpsc_sync_data_sig_v3',BASE='cgpsc_bank_base_ids_v1';
 const sigData=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),revisionLoad(),storageGet(ATT,''),storageGet(DELN,'')]));
@@ -5990,10 +5832,9 @@ function union(remote){
  storageSet(REVISION_KEY,JSON.stringify(revisionMerge(revisionLoad(),remote.revision||[])));
  storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),remote.plan)));
  storageSet(ATT,JSON.stringify(cleanAtt(mergeObj(J(ATT,[]),remote.attempts,'at',o=>o).sort((a,c)=>Date.parse(c.at)-Date.parse(a.at)))));
- if(remote.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),remote.studyTime)));
  dropDeleted();
 }
-function takeRemote(r){mergeDeleted(r.deletedNotes);if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(trackerMerge(getTrackerSnapshot(),r.tracker)));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)));dropDeleted()}
+function takeRemote(r){mergeDeleted(r.deletedNotes);if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(trackerMerge(getTrackerSnapshot(),r.tracker)));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));dropDeleted()}
 function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 applySnapshot=function(){return false};   /* never load another device's exam state */
 async function pull(full){
@@ -6021,8 +5862,8 @@ cloudSaveNow=async function(){
  try{
   const sigB=sig(),sigDB=sigData(),baseB=bankIdsNow();   /* FIX: remember the state that is actually uploaded */
   const p=buildCloudPayload();p.updatedAt=new Date().toISOString();const ver=storageGet(VER,''),ep=cloudEndpoint(),h={...cloudHeaders(),Prefer:'return=representation'};let ok=false,srvAt='';
-  if(ver){const r=await fetch(ep+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body:JSON.stringify({payload:p,updated_at:p.updatedAt})});if(!r.ok)throw Error('save '+r.status);const rr=await r.json();ok=rr.length>0;srvAt=(rr[0]&&rr[0].updated_at)||''}
-  else{const r=await fetch(ep,{method:'POST',headers:h,body:JSON.stringify({id:CLOUD_CONFIG.rowId,payload:p,updated_at:p.updatedAt})});if(r.status!==409){if(!r.ok)throw Error('save '+r.status);ok=true;try{const rr=await r.json();srvAt=(rr[0]&&rr[0].updated_at)||''}catch(e){}}}
+  if(ver){const r=await fetch(ep+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&updated_at=eq.'+encodeURIComponent(ver)+'&select=updated_at',{method:'PATCH',headers:h,body:JSON.stringify({payload:p,updated_at:p.updatedAt})});if(!r.ok)throw Error('save '+r.status);const rr=await r.json();ok=rr.length>0;srvAt=(rr[0]&&rr[0].updated_at)||''}
+  else{const r=await fetch(ep+'?select=updated_at',{method:'POST',headers:h,body:JSON.stringify({id:CLOUD_CONFIG.rowId,payload:p,updated_at:p.updatedAt})});if(r.status!==409){if(!r.ok)throw Error('save '+r.status);ok=true;try{const rr=await r.json();srvAt=(rr[0]&&rr[0].updated_at)||''}catch(e){}}}
   if(ok){saveRetry=0;storageSet(VER,srvAt||p.updatedAt);storageSet(SYNC,sigB);storageSet(SYNCD,sigDB);storeBase(baseB);cloudStatus('Synced just now')}   /* FIX: edits made during the upload stay marked as unsynced */
   else{cloudBusy=false;await pull(true);cloudQueued=false;saveRetry++;if(saveRetry>6){saveRetry=0;cloudStatus('Sync conflict — will retry');return}setTimeout(cloudSaveNow,Math.min(200*Math.pow(2,saveRetry),8000));return}   /* FIX: bounded back-off instead of a 200 ms infinite loop */
  }catch(e){cloudStatus('Offline — saved on this device');console.warn(e)}
@@ -6030,7 +5871,7 @@ cloudSaveNow=async function(){
 };
 queueCloudSave=function(){if(!cloudEnabled()||!ready)return;clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>{if(sig()!==storageGet(SYNC,''))cloudSaveNow()},$('exam').classList.contains('hidden')?1000:5000)};
 /* Sync heartbeat: every 5s pull remote changes; retry the upload only if notes / banks / tracker / revision really have unsynced edits.
-   (Plan + study time sync through their own rows, so they must not trigger a full-payload upload.) */
+   (The Plan sync uses its own row, so it must not trigger a full-payload upload.) */
 const msig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),revisionLoad(),storageGet(ATT,'')]));
 let okMain=null;
 const syncBeat=async()=>{try{await cloudPullLatest()}catch(e){}try{if(!cloudEnabled()||!ready||cloudBusy)return;const m=msig();if(okMain===null||sig()===storageGet(SYNC,'')){okMain=m;return}if(m!==okMain)cloudSaveNow()}catch(e){}};
@@ -6681,7 +6522,6 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   let timerSeconds=900;
   let timerRunning=false;
   let timerHandle=null;
-  let notesFocusSegmentStartedAt=0;
 
   const savedOpen=safeJSON(OPEN_KEY,['General Studies']);
   let openSubjects=new Set(Array.isArray(savedOpen)?savedOpen.filter(x=>SUBJECT_MAP[x]):['General Studies']);
@@ -6766,12 +6606,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   function formatTime(sec){return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0')}
   function updateTimerUI(){const left=Math.max(0,timerSeconds);$n('notesFocusTimer').textContent=formatTime(left);$n('notesFocusProgress').style.width=((900-left)/900*100)+'%';$n('notesFocusPauseBtn').disabled=!timerRunning}
   function persistTimer(){saveJSON(TIMER_KEY,{seconds:timerSeconds,running:false})}
-  function notesFocusMeta(){const d=notesData();for(const s of SUBJECTS){const n=(d[s.name]||[]).find(x=>x.id===selectedNoteId);if(n)return{cat:s.name,topic:n.topic||n.title||'Focus study'};}return{cat:selectedSubject||'Notes',topic:selectedTopic||'Focus study'}}
-  function logNotesFocusSegment(){if(!notesFocusSegmentStartedAt)return;const secs=Math.floor((Date.now()-notesFocusSegmentStartedAt)/1000);notesFocusSegmentStartedAt=0;if(secs>=10&&typeof window.kaushalLogStudyTime==='function'){const meta=notesFocusMeta();window.kaushalLogStudyTime(secs,{cat:meta.cat,topic:meta.topic,src:'notes-focus'})}}
-  function stopTimer(logStudy=true){if(logStudy)logNotesFocusSegment();if(timerHandle){clearInterval(timerHandle);timerHandle=null}timerRunning=false;updateTimerUI();persistTimer();if(typeof progressRenderDashboard==='function'&&!$n('progressScreen')?.classList.contains('hidden'))progressRenderDashboard()}
-  function startTimer(){if(!selectedNoteId){return}if(timerSeconds<=0)timerSeconds=900;if(timerRunning)return;timerRunning=true;notesFocusSegmentStartedAt=Date.now();updateTimerUI();clearInterval(timerHandle);timerHandle=setInterval(()=>{timerSeconds--;updateTimerUI();if(timerSeconds<=0){logNotesFocusSegment();stopTimer(false);$n('notesFocusTimer').textContent='00:00';$n('notesLotteryTitle').textContent='Focus session complete';$n('notesLotterySubjectLabel').textContent='Great. Draw another note when you are ready.'}},1000)}
-  function pauseTimer(){stopTimer(true)}
-  function resetTimer(){stopTimer(true);timerSeconds=900;updateTimerUI();persistTimer()}
+  function stopTimer(){if(timerHandle){clearInterval(timerHandle);timerHandle=null}timerRunning=false;updateTimerUI();persistTimer();if(typeof progressRenderDashboard==='function'&&!$n('progressScreen')?.classList.contains('hidden'))progressRenderDashboard()}
+  function startTimer(){if(!selectedNoteId){return}if(timerSeconds<=0)timerSeconds=900;if(timerRunning)return;timerRunning=true;updateTimerUI();clearInterval(timerHandle);timerHandle=setInterval(()=>{timerSeconds--;updateTimerUI();if(timerSeconds<=0){stopTimer();$n('notesFocusTimer').textContent='00:00';$n('notesLotteryTitle').textContent='Focus session complete';$n('notesLotterySubjectLabel').textContent='Great. Draw another note when you are ready.'}},1000)}
+  function pauseTimer(){stopTimer()}
+  function resetTimer(){stopTimer();timerSeconds=900;updateTimerUI();persistTimer()}
   function clearTopic(){selectedTopic='';localStorage.removeItem(TOPIC_KEY);$n('notesSelectedTopic').textContent='No topic selected';renderSubjects()}
   function openNotesV2(){
     if(typeof setActiveView==='function')setActiveView('notes');
@@ -7084,7 +6922,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   /* ---------- Focus Lottery (15-minute session, 10-day cooldown) ---------- */
   const FOCUS_SECS=900, COOLDOWN_DAYS=10, COOLDOWN_MS=COOLDOWN_DAYS*86400000;
   const TIMER_KEY='cgpsc_notes_focus_timer_v1';
-  let lot={id:'',subject:'',seconds:FOCUS_SECS,running:false,handle:null,segStart:0,endAt:0,logged:0,filter:'__all__'};
+  let lot={id:'',subject:'',seconds:FOCUS_SECS,running:false,handle:null,endAt:0,filter:'__all__'};
   function parseTopic(t){
     const parts=String(t||'').split('|'),rest=parts.slice(1).join('|'),sep=rest.indexOf(' › ');
     return sep>=0?{group:rest.slice(0,sep),topic:rest.slice(sep+3)}:{group:'',topic:rest||String(t||'')};
@@ -7119,25 +6957,9 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   function persistTimer(){
     try{localStorage.setItem(TIMER_KEY,JSON.stringify({id:lot.id,subject:lot.subject,seconds:lot.seconds,running:lot.running,endAt:lot.running?lot.endAt:0,filter:lot.filter}))}catch(e){}
   }
-  function refreshStudyViews(){
-    try{if(typeof window.trackerRender==='function')window.trackerRender()}catch(e){}
-    try{const p=$('progressScreen');if(p&&!p.classList.contains('hidden')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}
-    try{const p=$('planScreen');if(p&&!p.classList.contains('hidden')&&typeof window.planRender==='function')window.planRender()}catch(e){}
-  }
-  /* adds the time studied to the app-wide study-time log (feeds Progress / Plan / Study-time report) */
-  function logFocusSegment(){
-    if(!lot.segStart)return;
-    const secs=Math.floor((Date.now()-lot.segStart)/1000);lot.segStart=0;
-    if(secs<1||typeof window.kaushalLogStudyTime!=='function')return;
-    const n=findNote(lot.id),p=n?parseTopic(n.topic):{group:'',topic:''};
-    window.kaushalLogStudyTime(secs,{cat:lot.subject||'Notes',topic:p.topic||(n&&n.title)||'Focus study',src:'notes-focus'});
-    lot.logged+=secs;
-    refreshStudyViews();
-  }
-  function stopLot(log){
-    if(log!==false)logFocusSegment();
+  function stopLot(){
     if(lot.handle){clearInterval(lot.handle);lot.handle=null}
-    lot.running=false;lot.segStart=0;persistTimer();paintLottery();
+    lot.running=false;persistTimer();paintLottery();
   }
   function tick(){
     lot.seconds=Math.max(0,Math.round((lot.endAt-Date.now())/1000));
@@ -7148,15 +6970,14 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     if(!lot.id)return;
     if(lot.running)return;
     if(lot.seconds<=0)lot.seconds=FOCUS_SECS;
-    lot.running=true;lot.segStart=Date.now();lot.endAt=Date.now()+lot.seconds*1000;
+    lot.running=true;lot.endAt=Date.now()+lot.seconds*1000;
     clearInterval(lot.handle);lot.handle=setInterval(tick,500);
     persistTimer();paintLottery();
   }
   function resetLot(){
-    stopLot(true);lot.seconds=FOCUS_SECS;lot.logged=0;persistTimer();paintLottery();
+    stopLot();lot.seconds=FOCUS_SECS;persistTimer();paintLottery();
   }
   function completeFocus(){
-    logFocusSegment();
     if(lot.handle){clearInterval(lot.handle);lot.handle=null}
     lot.running=false;lot.seconds=0;
     const id=lot.id,n=findNote(id);
@@ -7167,7 +6988,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       if(i>=0){arr[i]={...arr[i],lotteryDoneAt:new Date().toISOString()};d[n.subject]=arr;save(d)}
     }
     const title=n?(n.title||'this note'):'this note';
-    lot.id='';lot.subject='';lot.seconds=FOCUS_SECS;lot.logged=0;persistTimer();
+    lot.id='';lot.subject='';lot.seconds=FOCUS_SECS;persistTimer();
     paintLottery();renderLibrary();
     congrats(title);
     try{window.dispatchEvent(new CustomEvent('kaushal:focus-complete',{detail:{id:id,subject:n&&n.subject,topic:n&&n.topic,title:title}}))}catch(e){}
@@ -7179,19 +7000,19 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       <div class="ntf-congrats-emoji">🎉</div>
       <h3>Congratulations!</h3>
       <p>You completed a full 15-minute focus session on <b>${esc(title)}</b>.</p>
-      <p class="ntf-congrats-sub">15 minutes were added to your total study time. This note will rest for ${COOLDOWN_DAYS} days before it can be drawn again.</p>
+      <p class="ntf-congrats-sub">This note will rest for ${COOLDOWN_DAYS} days before it can be drawn again.</p>
       <button type="button" class="btn primary" id="ntfCongratsOk">Great, continue</button></div>`;
     document.body.appendChild(el);
     $('ntfCongratsOk').onclick=()=>el.remove();
     try{if(navigator.vibrate)navigator.vibrate([120,60,120])}catch(e){}
   }
   function drawLot(){
-    if(lot.running)stopLot(true);else logFocusSegment();
+    if(lot.running)stopLot();
     const {pool}=lotteryPool(lot.filter);
     if(!pool.length){paintLottery();return}
     let cand=pool.length>1?pool.filter(n=>n.id!==lot.id):pool;
     const pick=cand[Math.floor(Math.random()*cand.length)];
-    lot.id=pick.id;lot.subject=pick.subject;lot.seconds=FOCUS_SECS;lot.logged=0;
+    lot.id=pick.id;lot.subject=pick.subject;lot.seconds=FOCUS_SECS;
     persistTimer();paintLottery();startLot();
   }
   function openLotNote(){
@@ -7249,10 +7070,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     $('ntfLotDraw').onclick=drawLot;
     $('ntfLotOpen').onclick=openLotNote;
     $('ntfLotStart').onclick=startLot;
-    $('ntfLotPause').onclick=()=>stopLot(true);
+    $('ntfLotPause').onclick=()=>stopLot();
     $('ntfLotReset').onclick=resetLot;
     $('ntfLotFilter').onchange=e=>{
-      if(lot.running)stopLot(true);
+      if(lot.running)stopLot();
       lot.filter=e.target.value||'__all__';lot.id='';lot.subject='';lot.seconds=FOCUS_SECS;persistTimer();paintLottery();
     };
     paintLottery();
@@ -7265,13 +7086,13 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       lot.id=s.id;lot.subject=s.subject||'';lot.filter=s.filter||'__all__';lot.seconds=Math.min(FOCUS_SECS,Math.max(0,s.seconds||FOCUS_SECS));
       if(s.running&&s.endAt){
         lot.seconds=Math.max(0,Math.round((s.endAt-Date.now())/1000));
-        if(lot.seconds>0){lot.running=true;lot.segStart=Date.now();lot.endAt=s.endAt;lot.handle=setInterval(tick,500)}
-        else{lot.seconds=1;lot.running=true;lot.segStart=Date.now()-1000;lot.endAt=Date.now();setTimeout(tick,50)}
+        if(lot.seconds>0){lot.running=true;lot.endAt=s.endAt;lot.handle=setInterval(tick,500)}
+        else{lot.seconds=1;lot.running=true;lot.endAt=Date.now();setTimeout(tick,50)}
       }
     }catch(e){}
   })();
-  /* leaving the page while a session runs: save the time studied so far */
-  window.addEventListener('pagehide',()=>{if(lot.running){logFocusSegment();lot.segStart=Date.now();persistTimer()}});
+  /* Preserve the countdown state when leaving the page; no study duration is recorded. */
+  window.addEventListener('pagehide',()=>{if(lot.running)persistTimer()});
 
   function esc(v){
     return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -7858,53 +7679,6 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 
 ;
 
-/* ===== Consolidated module: kaushal-test-time-logger ===== */
-/* Adds the time spent inside a test (regular exam, Quick Quiz, question-bank practice, Exam Hall)
-   to the daily study hours (same log used by Plan > Study time and Progress). */
-(function(){
-  'use strict';
-  const $=id=>document.getElementById(id);
-  const visible=id=>{const e=$(id);return !!e&&!e.classList.contains('hidden')};
-  let seg=0,kind='';
-  function testing(){
-    if(visible('examHallScreen'))return 'hall';
-    if(visible('exam')||visible('confirm'))return 'exam';
-    return '';
-  }
-  function fmt(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+'h '+m+'m':m?m+'m':s+'s'}
-  function toast(msg){
-    const old=$('kaushalTestToast');if(old)old.remove();
-    const t=document.createElement('div');t.id='kaushalTestToast';t.textContent=msg;
-    t.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:99998;max-width:90vw;padding:11px 16px;border-radius:12px;background:#24565A;color:#fff;font:600 13px/1.4 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.3)';
-    document.body.appendChild(t);setTimeout(()=>{try{t.remove()}catch(e){}},4500);
-  }
-  function refreshViews(){
-    try{if(visible('planScreen')&&typeof window.planRender==='function')window.planRender()}catch(e){}
-    try{if(visible('progressScreen')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}
-  }
-  /* log the time since the segment started; keepOpen=true continues a new segment (used when the page is hidden) */
-  function flush(keepOpen,announce){
-    if(!seg)return;
-    const secs=Math.floor((Date.now()-seg)/1000),k=kind;
-    seg=keepOpen?Date.now():0;if(!keepOpen)kind='';
-    if(secs<10||typeof window.kaushalLogStudyTime!=='function')return;
-    let q=0;if(k!=='hall'){try{q=(window.App&&App.questions&&App.questions.length)||0}catch(e){}}
-    window.kaushalLogStudyTime(secs,{cat:'Mock Test',topic:(k==='hall'?'Exam Hall test':'Test')+(q?' • '+q+' questions':''),src:'test'});
-    refreshViews();
-    if(announce)toast('⏱ '+fmt(secs)+' of test time added to today’s study hours');
-  }
-  function watch(){
-    const now=testing();
-    if(now&&!seg){seg=Date.now();kind=now}
-    else if(now&&seg&&kind!==now){flush(false,false);seg=Date.now();kind=now}
-    else if(!now&&seg){flush(false,true)}
-  }
-  setInterval(watch,1000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush(true,false)});
-  window.addEventListener('pagehide',()=>flush(true,false));
-  watch();
-})();
-
 ;
 
 /* ===== Consolidated module: kaushal-notes-durable-backup ===== */
@@ -8195,37 +7969,6 @@ try{if(typeof App!=="undefined"&&App.questions&&App.questions.length&&typeof win
 
 ;
 
-/* ===== Consolidated module: kaushal-note-study-time-logger ===== */
-/* Log time spent reading a saved note into Plan > Study time / Progress.
-   A note session is counted only after at least 2 minutes of visible reading.
-   Time pauses when the tab is hidden and resumes when the note is visible again. */
-(function(){
-  'use strict';
-  const MIN_READ_SECONDS=120;
-  const $=id=>document.getElementById(id);
-  let activeId='', segmentStart=0, accruedMs=0, qualified=false, activeTitle='', activeSubject='';
-  function readerVisible(){const e=$('noteReaderScreen');return !!e&&!e.classList.contains('hidden')&&document.visibilityState!=='hidden'&&!!window._currentOpenNoteId}
-  function getMeta(){return {id:String(window._currentOpenNoteId||''),title:(($('noteReaderTitle')||{}).textContent||'Saved note').trim(),subject:(($('noteReaderSubject')||{}).textContent||'Notes').split(' · ')[0].trim()||'Notes'}}
-  function accrue(now){if(segmentStart){accruedMs+=Math.max(0,now-segmentStart);segmentStart=now}}
-  function logSeconds(seconds){if(seconds<1||typeof window.kaushalLogStudyTime!=='function')return;window.kaushalLogStudyTime(seconds,{cat:activeSubject||'Notes',topic:activeTitle||'Saved note',src:'notes',nid:activeId});try{if($('planScreen')&&!$('planScreen').classList.contains('hidden')&&typeof window.planRender==='function')window.planRender()}catch(e){}try{if($('progressScreen')&&!$('progressScreen').classList.contains('hidden')&&typeof window.progressRenderDashboard==='function')window.progressRenderDashboard()}catch(e){}}
-  const PEND_KEY='kaushal_note_read_pending_v1';
-  function pendLoad(){try{return JSON.parse(localStorage.getItem(PEND_KEY)||'{}')||{}}catch(e){return {}}}
-  function pendSave(p){try{localStorage.setItem(PEND_KEY,JSON.stringify(p))}catch(e){}}
-  function pendTake(id){const p=pendLoad(),e=p[id];if(!e)return 0;delete p[id];pendSave(p);return (Date.now()-(e.t||0)<864e5)?Math.max(0,Number(e.ms)||0):0}
-  function pendPut(id,ms){if(!id||ms<1000)return;const p=pendLoad();p[id]={ms:Math.min(ms,MIN_READ_SECONDS*1000-1),t:Date.now()};pendSave(p)}
-  function finish(){if(!activeId)return;accrue(Date.now());const secs=Math.floor(accruedMs/1000);if(qualified){if(secs>0)logSeconds(secs)}else pendPut(activeId,accruedMs);activeId='';segmentStart=0;accruedMs=0;qualified=false;activeTitle='';activeSubject=''}
-  function tick(){const visible=readerVisible(),meta=visible?getMeta():null,now=Date.now();
-    if(activeId&&(!visible||!meta||meta.id!==activeId)){finish()}
-    if(visible&&meta&&meta.id){if(!activeId){activeId=meta.id;activeTitle=meta.title;activeSubject=meta.subject;accruedMs=pendTake(meta.id);qualified=false;segmentStart=now}else{accrue(now)}
-      if(!qualified&&accruedMs>=MIN_READ_SECONDS*1000){qualified=true;const secs=Math.floor(accruedMs/1000);if(secs>0){logSeconds(secs);accruedMs-=secs*1000}}
-    }
-  }
-  setInterval(tick,1000);
-  document.addEventListener('visibilitychange',tick);
-  window.addEventListener('pagehide',()=>{if(activeId){accrue(Date.now());if(qualified){if(accruedMs>0)logSeconds(Math.floor(accruedMs/1000))}else pendPut(activeId,accruedMs);activeId='';segmentStart=0;accruedMs=0;qualified=false}});
-  tick();
-})();
-
 ;
 
 /* ===== Consolidated module: kaushal-smart-notes-dashboard-v1 ===== */
@@ -8240,19 +7983,16 @@ const meta=()=>read(META_KEY,{});
 const saveMeta=m=>write(META_KEY,m);
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const datePlus=days=>{const d=new Date();d.setDate(d.getDate()+days);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-const STT_KEY_CC='cgpsc_study_time_v1';
-const todayStudySecs=()=>{try{const raw=(typeof window.storageGet==='function'?window.storageGet(STT_KEY_CC,''):localStorage.getItem(STT_KEY_CC))||'{}';const x=JSON.parse(raw)||{},del=x.del||{},t=today();return (Array.isArray(x.sessions)?x.sessions:[]).reduce((a,s)=>a+((s&&s.date===t&&!del[s.id])?(Number(s.secs)||0):0),0)}catch(e){return 0}};
 const todayPlanStats=()=>{const p=read('cgpsc_daily_study_plan_v1',{}),a=(p&&p.days||{})[today()],arr=Array.isArray(a)?a:[];return{done:arr.filter(x=>x&&x.done).length,total:arr.length}};
 const todayQuestions=()=>{const t=read('cgpsc_question_tracker_v2',{}),r=(t&&t.days||{})[today()];return !r?0:(Array.isArray(r)?r.length:Object.keys(r).length)};
 function paintExtra(){const a=$('ccPlanDone'),b=$('ccQuestionsToday');if(a){const x=todayPlanStats();a.textContent=x.done+'/'+x.total}if(b)b.textContent=todayQuestions()}
-const fmtMins=secs=>{const m=Math.floor(secs/60);if(m>=60)return Math.floor(m/60)+'h '+(m%60)+'m';if(m>0)return m+'m';return secs>0?'<1m':'0m'};
 const due=n=>{const m=meta()[String(n.id)]||{};return m.status==='revision'||!!m.nextReview&&m.nextReview<=today()};
 function safe(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function openNote(n){try{write('kaushal_smart_last_note_v1',String(n.id));if(typeof window.notesOpenReader==='function')window.notesOpenReader(n.id);else if(typeof window.notesOpenSavedNote==='function')window.notesOpenSavedNote(n.id);else if(typeof window.openSavedNote==='function')window.openSavedNote(n.id);else if(typeof window.notesOpen==='function'){window.notesOpen();setTimeout(()=>{const b=document.querySelector('[data-open-note-v2="'+CSS.escape(String(n.id))+'"]');b?.click()},150)}}catch(e){}}
 let filter='all';
 function render(){
  const notes=allNotes(),m=meta(),q=($('snSearch')?.value||'').toLowerCase().trim(),dueNotes=notes.filter(due),mastered=notes.filter(n=>(m[String(n.id)]||{}).status==='mastered');
- if($('ccNotesCount'))$('ccNotesCount').textContent=notes.length;paintExtra();if($('ccStudyMinutes'))$('ccStudyMinutes').textContent=fmtMins(todayStudySecs());if($('snAllCount'))$('snAllCount').textContent=notes.length;if($('snDueBadge'))$('snDueBadge').textContent=dueNotes.length;
+ if($('ccNotesCount'))$('ccNotesCount').textContent=notes.length;paintExtra();if($('snAllCount'))$('snAllCount').textContent=notes.length;if($('snDueBadge'))$('snDueBadge').textContent=dueNotes.length;
  if($('ccTodayLabel'))$('ccTodayLabel').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}).toUpperCase();
  const filtered=notes.filter(n=>{const mm=m[String(n.id)]||{},st=mm.status||'not-started';return (filter==='all'||(filter==='revision'?due(n):st===filter))&&(!q||(String(n.title||'').toLowerCase()+' '+n.subject.toLowerCase()+' '+String(n.topic||'').toLowerCase()).includes(q))}).slice(0,12);
  const list=$('snNotesList');if(!list)return;
@@ -8276,8 +8016,6 @@ function openPersonal(id){const n=allNotes().find(x=>String(x.id)===String(id));
 $('snSearch')?.addEventListener('input',render);
 $('snResumeBtn')?.addEventListener('click',()=>{const id=read('kaushal_smart_last_note_v1',''),notes=allNotes(),n=notes.find(x=>String(x.id)===String(id))||notes.find(x=>(meta()[String(x.id)]||{}).status==='reading')||notes[0];if(n)openNote(n);else alert('Save a note first, then you can resume it here.')});
 window.kaushalSmartNotesRender=render;
-(function(){const paintMinutes=()=>{const e=$('ccStudyMinutes');if(e)e.textContent=fmtMins(todayStudySecs());paintExtra()};const wrap=()=>{const f=window.kaushalLogStudyTime;if(typeof f==='function'&&!f.__ccWrapped){const w=function(){const r=f.apply(this,arguments);try{paintMinutes()}catch(e){}return r};w.__ccWrapped=true;window.kaushalLogStudyTime=w}};wrap();document.addEventListener('DOMContentLoaded',wrap);
-setInterval(()=>{try{paintMinutes()}catch(e){}},5000);})();
 document.addEventListener('DOMContentLoaded',render);
 window.addEventListener('storage',e=>{if(e.key===NOTES_KEY||e.key===META_KEY)render()});
 setInterval(()=>{if(!$('start')?.classList.contains('hidden')||!$('notesScreen')?.classList.contains('hidden'))render()},15000);
@@ -8287,11 +8025,7 @@ setInterval(()=>{if(!$('start')?.classList.contains('hidden')||!$('notesScreen')
 <script id="kaushal-plan-sync-v1">
 /* ============================================================
    DAILY STUDY PLAN page — dedicated lightweight cloud sync
-   Both the topic list AND the study-time tracker used to travel inside the one
-   huge cloud record (question banks + notes + everything), so every tick, edit,
-   or saved session re-uploaded megabytes. Each now has its own tiny row:
-     plan        → row …0002   (topics, order, deletions)
-     study time  → row …0003   (sessions, deletions)
+   The daily topic list uses its own lightweight row (…0002) for topics, order, and deletions.
    - edits are pushed ~0.3s later with compare-and-swap + merge (no lost edits)
    - other devices check a tiny "updated_at" every 5s / on focus / on tab-show
    - local data renders instantly; the network never blocks the screen
@@ -8308,9 +8042,6 @@ function refreshUI(){
   try{const ps=$('planScreen');if(ps&&!ps.classList.contains('hidden')&&typeof planRender==='function')planRender()}catch(e){}
   try{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()}catch(e){}
 }
-/* study sessions have no stable order → sort by id so every device produces identical JSON (prevents sync ping-pong) */
-const stNorm=x=>{const m=stMerge(x||{},{});m.sessions.sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);return m};
-
 function channel(cfg){
   const ch={busy:false,queued:false,pulling:false,fallback:false,dirty:false,timer:null};
   const ep=()=>cloudEndpoint()+'?id=eq.'+encodeURIComponent(cfg.row);
@@ -8347,10 +8078,10 @@ function channel(cfg){
         const h={...cloudHeaders(),Prefer:'return=representation'};
         let rows;
         if(ver){
-          const r=await fetch(ep()+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body:JSON.stringify({payload:local,updated_at:at}),keepalive:!!keepalive});
+          const r=await fetch(ep()+'&updated_at=eq.'+encodeURIComponent(ver)+'&select=updated_at',{method:'PATCH',headers:h,body:JSON.stringify({payload:local,updated_at:at}),keepalive:!!keepalive});
           if(!r.ok)throw httpErr(r.status);rows=await r.json();
         }else{
-          const r=await fetch(cloudEndpoint(),{method:'POST',headers:h,body:JSON.stringify({id:cfg.row,payload:local,updated_at:at}),keepalive:!!keepalive});
+          const r=await fetch(cloudEndpoint()+'?select=updated_at',{method:'POST',headers:h,body:JSON.stringify({id:cfg.row,payload:local,updated_at:at}),keepalive:!!keepalive});
           if(r.status===409)rows=[];else{if(!r.ok)throw httpErr(r.status);rows=await r.json()}
         }
         if(rows&&rows.length){storageSet(cfg.ver,rows[0].updated_at||at);ch.dirty=false;break}
@@ -8367,14 +8098,10 @@ function channel(cfg){
 const plan=channel({name:'plan',row:'00000000-0000-0000-0000-000000000002',ver:'cgpsc_plan_srv_ver_v1',key:PLAN_KEY,delay:300,
   load:planLoad,norm:x=>x||{},merge:(l,r)=>planMergeData(l,r),
   hasData:p=>!!(p&&p.days&&Object.keys(p.days).length)});
-const study=channel({name:'study',row:'00000000-0000-0000-0000-000000000003',ver:'cgpsc_study_srv_ver_v1',key:STT_KEY,delay:800,
-  load:stLoad,norm:stNorm,merge:(l,r)=>stNorm(stMerge(l,r)),
-  hasData:p=>!!(p&&((p.sessions&&p.sessions.length)||(p.del&&Object.keys(p.del).length)))});
-const all=[plan,study];
+const all=[plan];
 
-/* ---- route every plan / study-time write through the light sync (no more full-payload upload) ---- */
+/* ---- route daily-plan writes through the light sync (no more full-payload upload) ---- */
 window.planSave=function(data){storageSet(PLAN_KEY,JSON.stringify(data));plan.touch()};
-window.stSave=function(d){storageSet(STT_KEY,JSON.stringify(d));study.touch()};
 window.planToggle=function(id){
   const data=planLoad(),items=planItems().map(x=>x.id===id?{...x,done:!x.done,completedAt:!x.done?new Date().toISOString():null,u:new Date().toISOString()}:x);
   data.days[planSelectedDate]=items;planSave(data);planRender();
@@ -8452,7 +8179,7 @@ setInterval(tick,120000);
  'use strict';
  const TABLE='cgpsc_sync_records', QUEUE_KEY='cgpsc_incremental_pending_v1', CURSOR_KEY='cgpsc_incremental_cursor_v1';
  const INTERNAL=/^(?:__kb|cgpsc_(?:incremental_|srv_ver|sync_sig|sync_sig_v3|srv_ver_v3|force_push|mig_v3|cloud_snapshot|plan_srv_ver|study_srv_ver|sync_base|sync_deleted|sync_sig_data|sync_sig_full|sync_ver)|kaushal_incremental_)/i;
- const SKIP=new Set(['cgpsc_active_view_v1','cgpsc_theme','cgpsc_cloud_snapshot_v1','cgpsc_plan_srv_ver_v1','cgpsc_study_srv_ver_v1','cgpsc_daily_study_plan_v1','cgpsc_study_time_v1','cgpsc_study_timer_v1']);
+ const SKIP=new Set(['cgpsc_active_view_v1','cgpsc_theme','cgpsc_cloud_snapshot_v1','cgpsc_plan_srv_ver_v1','cgpsc_study_srv_ver_v1','cgpsc_daily_study_plan_v1','cgpsc_study_time_v1','cgpsc_study_timer_v1','cgpsc_study_time_progress_period_v1','kaushal_note_focus_pending_v1','kaushal_note_read_pending_v1']);
  let active=false, remoteApply=false, pushing=false, pulling=false, timer=null, originalSave=null, originalQueue=null;
  const parse=(v,d)=>{try{return JSON.parse(v==null?'null':v)??d}catch(_){return d}};
  const now=()=>new Date().toISOString();
@@ -8478,7 +8205,7 @@ setInterval(tick,120000);
      const base=storageGet(seenKey(k),''),remoteAt=remote[0]?.updated_at||'';
      // Never overwrite a remote edit we have not seen. Keep the local version queued for manual resolution.
      if(remoteAt&&(!base||remoteAt>base)){const el=document.getElementById('cloudSyncText');if(el){el.textContent='Sync conflict — local edit kept on this device';el.dataset.state='error'}continue}
-     const row=localRecord(k),saved=await request(endpoint()+'?on_conflict=record_key',{method:'POST',headers:headers(),body:JSON.stringify(row)});
+     const row=localRecord(k),saved=await request(endpoint()+'?on_conflict=record_key&select=updated_at',{method:'POST',headers:headers(),body:JSON.stringify(row)});
      storageSet(seenKey(k),saved?.[0]?.updated_at||row.updated_at);q=q.filter(x=>x!==k);setQueue(q)
    }
    const el=document.getElementById('cloudSyncText');if(el&&q.length===0){el.textContent='Incremental sync ready';el.dataset.state='ok'}
@@ -8489,14 +8216,14 @@ setInterval(tick,120000);
    if(cursor)url+='&updated_at=gt.'+encodeURIComponent(cursor);
    const rows=await request(url,{headers:cloudHeaders()});let newest=cursor;
    remoteApply=true;
-   try{for(const row of rows){if(!row||!isSyncable(row.record_key))continue;
+   try{for(const row of rows){if(row?.updated_at&&(!newest||row.updated_at>newest))newest=row.updated_at;if(!row||!isSyncable(row.record_key))continue;
       // Local pending edits always win until their queued write succeeds.
       if(getQueue().includes(row.record_key))continue;
       if(row.is_deleted){storageRemove(row.record_key)}else{
         const value=row.payload&&typeof row.payload.raw==='string'?row.payload.raw:JSON.stringify(row.payload);
         storageSet(row.record_key,value);
       }
-      if(row.updated_at){storageSet(seenKey(row.record_key),row.updated_at);if(!newest||row.updated_at>newest)newest=row.updated_at;}
+      if(row.updated_at)storageSet(seenKey(row.record_key),row.updated_at);
    }}finally{remoteApply=false}
    if(newest)storageSet(CURSOR_KEY,newest);
    if(rows.length&&typeof window.kaushalSmartNotesRender==='function')try{window.kaushalSmartNotesRender()}catch(_){}
@@ -8512,7 +8239,7 @@ setInterval(tick,120000);
    try{
      const existing=await request(endpoint()+'?select=record_key&limit=1',{headers:cloudHeaders()});
      if(!existing.length){const keys=(window.__kbKeys?window.__kbKeys():[]);const rows=[];for(const k of keys){if(isSyncable(k)){const raw=localValue(k);if(raw!==null){rows.push({record_key:k,payload:{raw:raw},is_deleted:false,updated_at:now()})}}}
-       for(let i=0;i<rows.length;i+=40){const batch=rows.slice(i,i+40),saved=await request(endpoint()+'?on_conflict=record_key',{method:'POST',headers:headers(),body:JSON.stringify(batch)});batch.forEach((row,j)=>storageSet(seenKey(row.record_key),saved?.[j]?.updated_at||row.updated_at));}
+       for(let i=0;i<rows.length;i+=40){const batch=rows.slice(i,i+40),saved=await request(endpoint()+'?on_conflict=record_key&select=updated_at',{method:'POST',headers:headers(),body:JSON.stringify(batch)});batch.forEach((row,j)=>storageSet(seenKey(row.record_key),saved?.[j]?.updated_at||row.updated_at));}
      }
    }catch(e){active=false;console.warn('Incremental sync bootstrap deferred:',e);return}
    // Disable the legacy whole-payload uploader only after the new table is confirmed and seeded.
