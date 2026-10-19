@@ -40,6 +40,19 @@
   }
   OBSOLETE_KEYS.forEach(k => { try { rawRemove(k); } catch (_) {} });
 
+  // FIX: per-key write timestamps (positive = written, negative = deleted). IndexedDB hydration used to
+  // pick the LONGER string, which says nothing about recency and could revive stale/deleted data.
+  const TS_KEY = '__kb_ts__';
+  let tsMap = {};
+  try { tsMap = JSON.parse(rawGet(TS_KEY) || '{}') || {}; } catch (_) { tsMap = {}; }
+  // FIX: sync / study-plan code must wait until IndexedDB has hydrated (heavy notes/banks live only there).
+  let hydrationDone = false;
+  window.__kbDone = false;
+  window.__kbReady = new Promise(function (res) {
+    window.__kbResolve = function () { if (hydrationDone) return; hydrationDone = true; window.__kbDone = true; res(); };
+  });
+  setTimeout(function () { window.__kbResolve(); }, 4000);
+
   // 2. Load all existing localStorage data into instant RAM cache
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -53,15 +66,31 @@
     console.warn('Initial localStorage scan warning:', e);
   }
 
+  memCache.delete(TS_KEY);
+  // FIX: expose every key (heavy keys are not in the raw localStorage, so backups must not rely on localStorage.key())
+  window.__kbKeys = function () { return Array.from(memCache.keys()); };
+
   // 3. Migrate legacy v1 notes/tracker into v2 if v2 is empty
   if (memCache.has('cgpsc_subject_html_notes_v1') && !memCache.has('cgpsc_subject_html_notes_v2')) {
     memCache.set('cgpsc_subject_html_notes_v2', memCache.get('cgpsc_subject_html_notes_v1'));
   }
-  if (memCache.has('cgpsc_ subject_html_notes_v1')) rawRemove('cgpsc_subject_html_notes_v1');
+  /* FIX: the old key check had a stray space ('cgpsc_ subject...') so the legacy v1 notes were never cleaned up.
+     The cleanup now happens after hydration, once v2 is safely stored in IndexedDB. */
 
   // 4. Override localStorage.getItem / setItem / removeItem synchronously
   let dbInstance = null;
   const pendingWrites = new Map();
+
+  function persistTs() {
+    const str = JSON.stringify(tsMap);
+    try { rawSet(TS_KEY, str); } catch (_) {}
+    flushToIDB(TS_KEY, str);
+  }
+  function touchTs(key, deleted) {
+    if (key === TS_KEY) return;
+    tsMap[key] = (deleted ? -1 : 1) * Date.now();
+    persistTs();
+  }
 
   function flushToIDB(key, val) {
     if (!dbInstance) {
@@ -90,6 +119,7 @@
     if (this === localStorage) {
       memCache.set(key, strVal);
       flushToIDB(key, strVal);
+      touchTs(key, false);
 
       // Keep small keys (< 25 KB) mirrored in localStorage; offload heavy banks/notes to IndexedDB
       if (strVal.length < 25000 || key === STUDY_KEY) {
@@ -115,6 +145,7 @@
     if (this === localStorage) {
       memCache.delete(key);
       flushToIDB(key, null);
+      touchTs(key, true);
     }
     return rawRemove(key);
   };
@@ -132,24 +163,51 @@
     const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
 
+    let idbTs = {};
+    const tsReq = store.get(TS_KEY);
+    tsReq.onsuccess = function () {
+    try { idbTs = JSON.parse(tsReq.result || '{}') || {}; } catch (_) { idbTs = {}; }
     store.openCursor().onsuccess = function(ev) {
       const cursor = ev.target.result;
       if (cursor) {
         const k = cursor.key;
         const idbVal = cursor.value;
-        // If key wasn't in localStorage (because it was offloaded to IDB previously), restore it to memCache
-        if (k === STUDY_KEY) {
+        const lt = tsMap[k] || 0, it = idbTs[k] || 0;
+        if (k === TS_KEY) {
+          // handled separately
+        } else if (k === STUDY_KEY) {
           if (!memCache.has(k)) memCache.set(k, idbVal);
           else {
             const merged = mergeStudy(memCache.get(k), idbVal);
             memCache.set(k, merged);
             try { rawSet(k, merged); } catch (_) {}
           }
-        } else if (!memCache.has(k) || (idbVal && String(idbVal).length > String(memCache.get(k) || '').length)) {
-          memCache.set(k, idbVal);
+        } else if (pendingWrites.has(k)) {
+          // written/deleted while IndexedDB was still opening: the in-memory value is the newest
+        } else if (!memCache.has(k)) {
+          // offloaded to IDB earlier -> restore, unless it was deleted afterwards on this device
+          if (!(lt < 0 && Math.abs(lt) >= Math.abs(it))) memCache.set(k, idbVal);
+        } else if (Math.abs(it) > Math.abs(lt)) {
+          // IndexedDB copy is strictly newer than the localStorage copy
+          if (it > 0) {
+            memCache.set(k, idbVal);
+            if (String(idbVal).length < 25000) { try { rawSet(k, String(idbVal)); } catch (_) {} }
+          }
+        } else if (!lt && !it) {
+          // legacy data without timestamps: keep the old behaviour once
+          if (idbVal && String(idbVal).length > String(memCache.get(k) || '').length) memCache.set(k, idbVal);
         }
         cursor.continue();
       } else {
+        Object.keys(idbTs).forEach(function (k) { if (Math.abs(idbTs[k] || 0) > Math.abs(tsMap[k] || 0)) tsMap[k] = idbTs[k]; });
+        pendingWrites.delete(TS_KEY);
+        persistTs();
+        // FIX: finish the legacy v1 notes cleanup now that v2 is stored in the same transaction
+        if (memCache.has('cgpsc_subject_html_notes_v2') && memCache.has('cgpsc_subject_html_notes_v1')) {
+          memCache.delete('cgpsc_subject_html_notes_v1');
+          store.delete('cgpsc_subject_html_notes_v1');
+          tx.oncomplete = function () { try { rawRemove('cgpsc_subject_html_notes_v1'); } catch (_) {} };
+        }
         // Persist all current memCache items into IndexedDB and offload heavy items from raw localStorage
         memCache.forEach((val, key) => {
           store.put(val, key);
@@ -179,9 +237,12 @@
         try { if (typeof revisionRenderScreen === 'function') revisionRenderScreen(); } catch (_) {}
         try { if (typeof trackerRender === 'function') trackerRender(); } catch (_) {}
         try { if (typeof planRender === 'function') planRender(); } catch (_) {}
+        window.__kbResolve();
       }
     };
+    };
   };
+  req.onerror = function () { window.__kbResolve(); };
 
   // Request persistent storage permission from the browser so OS never auto-clears it
   if (navigator.storage && navigator.storage.persist) {
@@ -3927,7 +3988,7 @@ function buildSolutions(){
 const REVISION_KEY='cgpsc_revision_queue_v1';
 function revisionLoad(){try{const raw=JSON.parse(localStorage.getItem(REVISION_KEY)||'[]');return Array.isArray(raw)?raw:[]}catch(e){return []}}
 function revisionSave(list){App.revision=Array.isArray(list)?list:[];try{localStorage.setItem(REVISION_KEY,JSON.stringify(App.revision))}catch(e){}}
-function revisionMerge(a,b){const map=new Map();[...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(item=>{if(!item||!item.key)return;const old=map.get(item.key);if(!old){map.set(item.key,item);return}map.set(item.key,{...old,...item,addedAt:old.addedAt||item.addedAt,attempts:Math.max(Number(old.attempts)||0,Number(item.attempts)||0)})});return Array.from(map.values()).sort((x,y)=>Date.parse(y.lastWrongAt||y.addedAt||0)-Date.parse(x.lastWrongAt||x.addedAt||0))}
+function revisionMerge(a,b){const map=new Map();[...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(item=>{if(!item||!item.key)return;const old=map.get(item.key);if(!old){map.set(item.key,item);return}{const ts=x=>Date.parse(x.lastWrongAt||x.addedAt||0)||0,newer=ts(item)>=ts(old)?item:old,older=newer===item?old:item;map.set(item.key,{...older,...newer,addedAt:old.addedAt||item.addedAt,attempts:Math.max(Number(old.attempts)||0,Number(item.attempts)||0)})}});return Array.from(map.values()).sort((x,y)=>Date.parse(y.lastWrongAt||y.addedAt||0)-Date.parse(x.lastWrongAt||x.addedAt||0))}
 function revisionQuestionKey(q){return String(q?.id??'')+'|'+String(q?.topic??'')+'|'+questionPlainText(q,0).trim().slice(0,260)}
 function revisionRecordQuestion(q,selected){if(!q||!selected||String(selected).toUpperCase()===String(q.answer).toUpperCase())return;const key=revisionQuestionKey(q),list=revisionMerge(App.revision,revisionLoad()),now=new Date().toISOString(),existing=list.find(x=>x.key===key);const item={key,id:q.id,topic:q.topic||'General',type:q.type||'mcq',questionText:questionPlainText(q,0),options:q.options||{},wrongAnswer:String(selected),correctAnswer:String(q.answer||'—'),explanation:q.explanation||'',addedAt:existing?.addedAt||now,lastWrongAt:now,attempts:(Number(existing?.attempts)||0)+1};revisionSave(existing?list.map(x=>x.key===key?{...x,...item}:x):[...list,item]);revisionRenderHome();revisionRenderScreen();queueCloudSave()}
 function revisionRemove(index){const list=revisionMerge(App.revision,revisionLoad());if(index<0||index>=list.length)return;list.splice(index,1);revisionSave(list);revisionRenderHome();revisionRenderScreen();queueCloudSave()}
@@ -4654,7 +4715,7 @@ function setTheme(theme){document.body.classList.remove('theme-comfort','theme-d
 $('dayThemeBtn').onclick=()=>{setTheme('day');setDisplayMenu(false)};$('comfortThemeBtn').onclick=()=>{setTheme('comfort');setDisplayMenu(false)};$('darkThemeBtn').onclick=()=>{setTheme('dark');setDisplayMenu(false)};$('focusBtn').onclick=()=>{document.body.classList.toggle('focus-mode');$('focusBtn').classList.toggle('active');$('focusBtn').textContent=document.body.classList.contains('focus-mode')?'Exit Focus':'Focus';setDisplayMenu(false)};setTheme(storageGet('cgpsc_theme','day'));
 window.addEventListener('beforeunload',e=>{save();if(App.state.started){e.preventDefault();e.returnValue='Exam is in progress.'}});
 setInput(SAMPLE);
-restoreSavedExam().then(()=>setTimeout(()=>{restoreActiveView();startCloudAutoSync()},80));
+(window.__kbReady||Promise.resolve()).then(()=>restoreSavedExam()).then(()=>setTimeout(()=>{restoreActiveView();startCloudAutoSync()},80));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')startCloudAutoSync();else stopCloudAutoSync()});
 window.addEventListener('online',()=>{if(cloudEnabled()){cloudStatus('Back online — syncing…','loading');cloudSaveNow();setTimeout(cloudPullLatest,900)}});
 
@@ -5700,9 +5761,9 @@ const box=$('studyHubRefreshBtn').parentNode,mk=(t,f)=>{const b=document.createE
 const fi=document.createElement('input');fi.type='file';fi.accept='.json';fi.hidden=true;document.body.appendChild(fi);
 fi.id='kaushalBackupFile';fi.onchange=()=>{const f=fi.files[0];fi.value='';if(f){if(typeof window.__kbRestore==='function')window.__kbRestore(f);else toast('⚠ Restore is not ready yet — please reload the page.')}};
 /* ---- backup helpers (shared by Export + Restore) ---- */
-const KB_EXCLUDE=new Set(['cgpsc_cloud_snapshot_v1','cgpsc_srv_ver_v3','cgpsc_sync_sig_v1','cgpsc_sync_sig_v3','cgpsc_force_push_v3','cgpsc_mig_v3','cgpsc_last_edit_v1','cgpsc_mock_v2','cgpsc_hall_session_v1','cgpsc_study_timer_v1','cgpsc_notes_focus_timer_v1','cgpsc_notes_focus_timer_v2','cgpsc_active_view_v1','cgpsc_topic_quiz_pending_v1']);
+const KB_EXCLUDE=new Set(['cgpsc_cloud_snapshot_v1','cgpsc_srv_ver_v3','cgpsc_sync_sig_v1','cgpsc_sync_sig_v3','cgpsc_force_push_v3','cgpsc_mig_v3','cgpsc_last_edit_v1','cgpsc_mock_v2','cgpsc_hall_session_v1','cgpsc_study_timer_v1','cgpsc_notes_focus_timer_v1','cgpsc_notes_focus_timer_v2','cgpsc_active_view_v1','cgpsc_topic_quiz_pending_v1','cgpsc_sync_data_sig_v3','cgpsc_bank_base_ids_v1','cgpsc_plan_srv_ver_v1','cgpsc_study_srv_ver_v1']);
 window.__kbIsData=k=>typeof k==='string'&&(k.startsWith('cgpsc_')||k.startsWith('kaushal_'))&&!KB_EXCLUDE.has(k);
-window.__kbCollect=()=>{const data={};let mem=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(window.__kbIsData(k)){const v=localStorage.getItem(k);if(v!==null)data[k]=v}}}catch(e){console.warn('backup: localStorage unreadable',e)}
+window.__kbCollect=()=>{const data={};let mem=0;try{const ks=new Set(window.__kbKeys?window.__kbKeys():[]);for(let i=0;i<localStorage.length;i++)ks.add(localStorage.key(i));ks.forEach(k=>{if(window.__kbIsData(k)){const v=localStorage.getItem(k);if(v!==null)data[k]=v}})}catch(e){console.warn('backup: localStorage unreadable',e)}   /* FIX: heavy keys (notes, question banks) are not in raw localStorage */
 try{if(typeof SAFE_STORAGE_MEMORY==='object')Object.keys(SAFE_STORAGE_MEMORY).forEach(k=>{if(window.__kbIsData(k)){data[k]=String(SAFE_STORAGE_MEMORY[k]);mem++}})}catch(e){}
 return {data,mem}};
 mk('Restore Backup',()=>fi.click());
@@ -5738,6 +5799,7 @@ bankNormalizeQuestions=function(d,s){const arr=d;if(!Array.isArray(arr)||!arr.le
 /* one-time migration of stored banks (answers upper-cased, stable content ids) */
 S(()=>{if(storageGet(MIG))return;storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(bankLoad())));if(!storageGet('cgpsc_last_edit_v1')){const sn=readLocalSnapshot();storageSet('cgpsc_last_edit_v1',sn?.updatedAt||new Date(0).toISOString())}storageSet(MIG,'1')});
 const boot={rev:revisionLoad(),plan:planLoad(),notes:notesLoad(),trk:getTrackerSnapshot()};
+if(window.__kbReady)window.__kbReady.then(()=>S(()=>{boot.rev=revisionLoad();boot.plan=planLoad();boot.notes=notesLoad();boot.trk=getTrackerSnapshot()}));  /* FIX: boot snapshot was taken before IndexedDB hydration */
 
 /* ---------- security: escape / sanitize ---------- */
 notesSafePreview=function(raw){const d=new DOMParser().parseFromString(String(raw||''),'text/html');d.querySelectorAll('script,iframe,object,embed,form,base,meta,link,style,title,noscript').forEach(x=>x.remove());d.body.querySelectorAll('*').forEach(el=>[...el.attributes].forEach(a=>{const v=a.value.replace(/[\u0000-\u0020\u00a0\u200b]/g,'').toLowerCase();if(/^on/i.test(a.name)||a.name==='srcdoc'||/^(javascript|vbscript|data:text\/html)/.test(v))el.removeAttribute(a.name)}));return d.body.innerHTML};
@@ -5747,7 +5809,16 @@ const cleanAtt=a=>(Array.isArray(a)?a:[]).map(x=>({at:isNaN(Date.parse(x?.at))?n
 writeLocalSnapshot=function(){};
 const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.questions=[];p.state={};p.startRemaining=0;p.attempts=cleanAtt(J(ATT,[]));p.studyTime=stLoad();p.deletedNotes=delNotes();return p};
 const sig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(STT_KEY,''),storageGet(DELN,'')]));
+/* FIX: plan + study time sync through their own rows and never update SYNC, so they made sig() look "unsynced" forever and forced the
+   merge-only union() path (deleted questions came back). The union/take decision now uses sigData() (main-row data only). */
+const SYNCD='cgpsc_sync_data_sig_v3',BASE='cgpsc_bank_base_ids_v1';
+const sigData=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),revisionLoad(),storageGet(ATT,''),storageGet(DELN,'')]));
+/* ids of every question at the last successful sync: lets union() tell "deleted elsewhere" from "new here" */
+function bankIdsNow(){const o={},b=bankLoad();Object.keys(b).forEach(k=>o[k]=(Array.isArray(b[k])?b[k]:[]).map(q=>q&&q.id));return o}
+function storeBase(o){storageSet(BASE,JSON.stringify(o))}
+let saveRetry=0;
 cloudStatus=function(t){const e=$('cloudSyncText');if(e)e.textContent=t;document.querySelectorAll('.bank-cloud-pill,#notesSyncBadge').forEach(x=>x.textContent='☁ '+t)};
+function mergeDay(r,l){const m={...r},has=x=>x&&typeof x==='object'&&((x.correct!==null&&x.correct!==undefined)||(x.wrong!==null&&x.wrong!==undefined));Object.entries(l||{}).forEach(([k,lv])=>{const rv=m[k];m[k]=(rv&&!has(lv)&&has(rv))?rv:lv});return m}
 function mergeObj(l,r,key,pick){const m=new Map();(l||[]).forEach(x=>x&&m.set(x[key],x));(r||[]).forEach(x=>{if(!x)return;const o=m.get(x[key]);m.set(x[key],o?pick(o,x):x)});return[...m.values()]}
 /* Completion records (focus-lottery done date, topic-test score) are written to a note WITHOUT changing updatedAt,
    so a plain "newest copy wins" merge used to throw them away. Always keep the newest of each record. */
@@ -5779,9 +5850,13 @@ function dropDeleted(){
 }
 function union(remote){
  mergeDeleted(remote.deletedNotes);
- const rb=migBank(remote.questionBanks||{}),lb=bankLoad(),b={};new Set([...Object.keys(lb),...Object.keys(rb)]).forEach(s=>b[s]=mergeObj(lb[s],rb[s],'id',o=>o));storageSet(QUESTION_BANKS_KEY,JSON.stringify(b));
+ const rb=migBank(remote.questionBanks||{}),lb=bankLoad(),b={},base=remote.questionBanks?J(BASE,null):null;
+ new Set([...Object.keys(lb),...Object.keys(rb)]).forEach(s=>{const bs=base&&Array.isArray(base[s])?new Set(base[s]):null,lm=new Set((lb[s]||[]).map(x=>x&&x.id)),rm=new Set((rb[s]||[]).map(x=>x&&x.id));
+  /* FIX: 3-way merge. A question seen at the last sync but now missing on one side was DELETED there, so it is not resurrected. */
+  b[s]=mergeObj(lb[s],rb[s],'id',o=>o).filter(x=>{if(!bs||!x)return true;return(lm.has(x.id)&&rm.has(x.id))||!bs.has(x.id)})});
+ storageSet(QUESTION_BANKS_KEY,JSON.stringify(b));
  const ln=notesLoad(),rn=notesNormalize(remote.notes),n={};new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(s=>n[s]=mergeObj(ln[s],rn[s],'id',(a,c)=>{const cn=Date.parse(c.updatedAt||0)>Date.parse(a.updatedAt||0);return noteMarks(cn?c:a,cn?a:c)}));storageSet(NOTES_KEY,JSON.stringify(n));
- const t=getTrackerSnapshot(),rt=remote.tracker?.days||{};Object.entries(rt).forEach(([d,v])=>{if(!t.days[d]||Array.isArray(t.days[d]))t.days[d]=v;else if(v&&!Array.isArray(v))t.days[d]={...v,...t.days[d]}});storageSet(TRACKER_KEY,JSON.stringify(t));
+ const t=getTrackerSnapshot(),rt=remote.tracker?.days||{};Object.entries(rt).forEach(([d,v])=>{if(!t.days[d]||Array.isArray(t.days[d]))t.days[d]=v;else if(v&&!Array.isArray(v))t.days[d]=mergeDay(v,t.days[d])});storageSet(TRACKER_KEY,JSON.stringify(t));
  storageSet(REVISION_KEY,JSON.stringify(revisionMerge(revisionLoad(),remote.revision||[])));
  storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),remote.plan)));
  storageSet(ATT,JSON.stringify(cleanAtt(mergeObj(J(ATT,[]),remote.attempts,'at',o=>o).sort((a,c)=>Date.parse(c.at)-Date.parse(a.at)))));
@@ -5792,21 +5867,21 @@ function takeRemote(r){mergeDeleted(r.deletedNotes);if(r.questionBanks)storageSe
 function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 applySnapshot=function(){return false};   /* never load another device's exam state */
 async function pull(full){
- if(!cloudEnabled()||pulling)return;pulling=true;
+ if(!cloudEnabled()||pulling||window.__kbDone===false)return;pulling=true;   /* FIX: never sync before IndexedDB hydration */
  try{
   const h={headers:cloudHeaders(),cache:'no-store'},ep=cloudEndpoint()+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId);
   let r=await fetch(ep+'&select=updated_at',h);if(!r.ok)throw Error('check '+r.status);const rows=await r.json();
-  if(!rows.length){ready=true;cloudStatus('Ready — no cloud copy yet');return}
+  if(!rows.length){ready=true;firstPull=false;cloudStatus('Ready — no cloud copy yet');cloudSaveNow();return}   /* FIX: upload local data when the cloud row does not exist yet */
   const sv=rows[0].updated_at;
-  if(storageGet(FORCE)&&firstPull){storageSet(VER,sv);localStorage.removeItem(FORCE);firstPull=false;ready=true;storageSet(SYNC,'');cloudSaveNow();return}
+  if(storageGet(FORCE)&&firstPull){storageSet(VER,sv);localStorage.removeItem(FORCE);firstPull=false;ready=true;storageSet(SYNC,'');storageSet(SYNCD,'');cloudSaveNow();return}
   if(!full&&!firstPull&&sv===storageGet(VER,''))return;
-  if(!$('exam').classList.contains('hidden')&&!firstPull)return;
+  if(!full&&!$('exam').classList.contains('hidden')&&!firstPull)return;   /* FIX: a forced pull (save conflict) must run during an exam, otherwise the CAS retry loop never ends */
   r=await fetch(ep+'&select=payload,updated_at',h);if(!r.ok)throw Error('load '+r.status);const row=(await r.json())[0];if(!row)return;
-  const unsynced=sig()!==storageGet(SYNC,'');
+  const unsynced=sigData()!==storageGet(SYNCD,''),fullSynced=sig()===storageGet(SYNC,'');
   if(firstPull||unsynced){union(row.payload||{});if(firstPull){S(()=>{storageSet(REVISION_KEY,JSON.stringify(revisionMerge(revisionLoad(),boot.rev)));storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),boot.plan)))})}}
   else takeRemote(row.payload||{});
   storageSet(VER,row.updated_at);ready=true;const wasFirst=firstPull;firstPull=false;refresh();
-  if(unsynced||wasFirst&&sig()!==storageGet(SYNC,'')){cloudSaveNow()}else{storageSet(SYNC,sig());cloudStatus('Synced')}
+  if(unsynced||wasFirst&&sigData()!==storageGet(SYNCD,'')){cloudSaveNow()}else{storageSet(SYNCD,sigData());if(fullSynced)storageSet(SYNC,sig());storeBase(bankIdsNow());cloudStatus('Synced')}
  }catch(e){cloudStatus('Sync problem — will retry');console.warn(e)}finally{pulling=false}
 }
 cloudPullLatest=()=>document.visibilityState==='hidden'?0:pull(false);
@@ -5814,11 +5889,12 @@ cloudSaveNow=async function(){
  if(!cloudEnabled()||!ready)return;if(cloudBusy){cloudQueued=true;return}
  cloudBusy=true;cloudStatus('Saving…');
  try{
+  const sigB=sig(),sigDB=sigData(),baseB=bankIdsNow();   /* FIX: remember the state that is actually uploaded */
   const p=buildCloudPayload();p.updatedAt=new Date().toISOString();const ver=storageGet(VER,''),ep=cloudEndpoint(),h={...cloudHeaders(),Prefer:'return=representation'};let ok=false,srvAt='';
   if(ver){const r=await fetch(ep+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&updated_at=eq.'+encodeURIComponent(ver),{method:'PATCH',headers:h,body:JSON.stringify({payload:p,updated_at:p.updatedAt})});if(!r.ok)throw Error('save '+r.status);const rr=await r.json();ok=rr.length>0;srvAt=(rr[0]&&rr[0].updated_at)||''}
   else{const r=await fetch(ep,{method:'POST',headers:h,body:JSON.stringify({id:CLOUD_CONFIG.rowId,payload:p,updated_at:p.updatedAt})});if(r.status!==409){if(!r.ok)throw Error('save '+r.status);ok=true;try{const rr=await r.json();srvAt=(rr[0]&&rr[0].updated_at)||''}catch(e){}}}
-  if(ok){storageSet(VER,srvAt||p.updatedAt);storageSet(SYNC,sig());cloudStatus('Synced just now')}
-  else{cloudBusy=false;await pull(true);cloudQueued=false;setTimeout(cloudSaveNow,200);return}
+  if(ok){saveRetry=0;storageSet(VER,srvAt||p.updatedAt);storageSet(SYNC,sigB);storageSet(SYNCD,sigDB);storeBase(baseB);cloudStatus('Synced just now')}   /* FIX: edits made during the upload stay marked as unsynced */
+  else{cloudBusy=false;await pull(true);cloudQueued=false;saveRetry++;if(saveRetry>6){saveRetry=0;cloudStatus('Sync conflict — will retry');return}setTimeout(cloudSaveNow,Math.min(200*Math.pow(2,saveRetry),8000));return}   /* FIX: bounded back-off instead of a 200 ms infinite loop */
  }catch(e){cloudStatus('Offline — saved on this device');console.warn(e)}
  finally{cloudBusy=false;if(cloudQueued){cloudQueued=false;setTimeout(cloudSaveNow,300)}}
 };
@@ -8206,7 +8282,7 @@ function rollover(){
 }
 
 /* ---- when to sync ---- */
-const tick=()=>{rollover();if(document.visibilityState==='visible')all.forEach(c=>c.pull(false))};
+const tick=()=>{rollover();if(window.__kbDone!==false&&document.visibilityState==='visible')all.forEach(c=>c.pull(false))};
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){tick()}
   else all.forEach(c=>{if(c.dirty){clearTimeout(c.timer);c.push(true)}})   /* flush before the tab sleeps */
@@ -8215,7 +8291,7 @@ window.addEventListener('focus',tick);
 window.addEventListener('online',()=>all.forEach(c=>c.pull(true)));
 window.addEventListener('pagehide',()=>all.forEach(c=>{if(c.dirty)c.push(true)}));
 setInterval(tick,5000);
-setTimeout(()=>all.forEach(c=>c.pull(true)),0);                           /* first sync starts immediately, in the background */
+(window.__kbReady||Promise.resolve()).then(()=>all.forEach(c=>c.pull(true)));                           /* first sync starts immediately, in the background */
 })();
 </script>
 <script id="bank-import-collapse">
