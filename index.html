@@ -6440,7 +6440,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       'img{max-width:100%;height:auto;}' +
       'table{max-width:100%;}' +
       'pre{max-width:100%;overflow:auto;white-space:pre-wrap;}' +
-      '</style></head><body>'+body+'</body></html>';
+      '</style></head><body>'+body+'
+
+
+</body></html>';
   }
 
   function mountNoteFrame(container,raw){
@@ -8438,6 +8441,108 @@ setInterval(tick,120000); // Reduced idle polling from every 5 seconds to every 
     btn.addEventListener('click',function(){var c=!card.classList.contains('bank-collapsed');apply(c);try{localStorage.setItem(KEY,c?'1':'0')}catch(e){}});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+<script id="cgpsc-incremental-record-sync-v1">
+/* Additive, opt-in incremental sync layer.
+   - Uses existing IndexedDB-backed localStorage bridge as the durable offline cache.
+   - Queues changed keys locally and retries on reconnect/foreground.
+   - Activates only when public.cgpsc_sync_records exists AND legacy sync has completed at least once.
+   - If the table is absent or blocked, the current legacy sync remains in control.
+   Note: this is record-per-storage-key sync; splitting individual questions/notes into rows requires
+   app-specific entity adapters and is deliberately not guessed from unknown user data. */
+(function(){
+ 'use strict';
+ const TABLE='cgpsc_sync_records', QUEUE_KEY='cgpsc_incremental_pending_v1', CURSOR_KEY='cgpsc_incremental_cursor_v1';
+ const INTERNAL=/^(?:__kb|cgpsc_(?:incremental_|srv_ver|sync_sig|sync_sig_v3|srv_ver_v3|force_push|mig_v3|cloud_snapshot|plan_srv_ver|study_srv_ver|sync_base|sync_deleted|sync_sig_data|sync_sig_full|sync_ver)|kaushal_incremental_)/i;
+ const SKIP=new Set(['cgpsc_active_view_v1','cgpsc_theme','cgpsc_cloud_snapshot_v1','cgpsc_plan_srv_ver_v1','cgpsc_study_srv_ver_v1','cgpsc_daily_study_plan_v1','cgpsc_study_time_v1','cgpsc_study_timer_v1']);
+ let active=false, remoteApply=false, pushing=false, pulling=false, timer=null, originalSave=null, originalQueue=null;
+ const parse=(v,d)=>{try{return JSON.parse(v==null?'null':v)??d}catch(_){return d}};
+ const now=()=>new Date().toISOString();
+ const headers=()=>({...cloudHeaders(),'Prefer':'resolution=merge-duplicates,return=representation'});
+ const endpoint=()=>CLOUD_CONFIG.url.replace(/\/$/,'')+'/rest/v1/'+TABLE;
+ const isSyncable=k=>typeof k==='string'&&!INTERNAL.test(k)&&!SKIP.has(k)&&(/^(cgpsc_|kaushal_)/i.test(k));
+ const getQueue=()=>parse(storageGet(QUEUE_KEY,'[]'),[]);
+ const seenKey=k=>'cgpsc_incremental_seen_v1_'+k;
+ function setQueue(q){storageSet(QUEUE_KEY,JSON.stringify([...new Set(q)]))}
+ function markDirty(k){if(remoteApply||!active||!isSyncable(k))return;const q=getQueue();if(!q.includes(k))q.push(k);setQueue(q);schedule(700)}
+ function schedule(ms=1200){clearTimeout(timer);timer=setTimeout(()=>{if(navigator.onLine){push().then(()=>pull(false)).catch(e=>console.warn('Incremental sync:',e))}},ms)}
+ async function request(url,opts={}){const r=await fetch(url,{cache:'no-store',...opts});if(!r.ok){const e=new Error('Incremental sync HTTP '+r.status);e.status=r.status;throw e}return r.status===204?[]:r.json()}
+ async function tableExists(){try{await request(endpoint()+'?select=record_key&limit=1',{headers:cloudHeaders()});return true}catch(e){return false}}
+ function localValue(k){return storageGet(k,null)}
+ function localRecord(k){const raw=localValue(k);if(raw===null)return {record_key:k,payload:null,is_deleted:true,updated_at:now()};return {record_key:k,payload:{raw:raw},is_deleted:false,updated_at:now()}}
+ async function push(){if(!active||pushing||!navigator.onLine)return;pushing=true;try{
+   let q=getQueue();
+   // Seed only after the legacy engine has established a baseline, preventing an empty/offline cache from
+   // replacing the existing cloud payload on first install.
+   if(!storageGet('cgpsc_srv_ver_v3',''))return;
+   for(const k of q){if(!isSyncable(k))continue;
+     const remote=await request(endpoint()+'?record_key=eq.'+encodeURIComponent(k)+'&select=updated_at,is_deleted',{headers:cloudHeaders()});
+     const base=storageGet(seenKey(k),''),remoteAt=remote[0]?.updated_at||'';
+     // Never overwrite a remote edit we have not seen. Keep the local version queued for manual resolution.
+     if(remoteAt&&(!base||remoteAt>base)){const el=document.getElementById('cloudSyncText');if(el){el.textContent='Sync conflict — local edit kept on this device';el.dataset.state='error'}continue}
+     const row=localRecord(k),saved=await request(endpoint()+'?on_conflict=record_key',{method:'POST',headers:headers(),body:JSON.stringify(row)});
+     storageSet(seenKey(k),saved?.[0]?.updated_at||row.updated_at);q=q.filter(x=>x!==k);setQueue(q)
+   }
+   const el=document.getElementById('cloudSyncText');if(el&&q.length===0){el.textContent='Incremental sync ready';el.dataset.state='ok'}
+ }catch(e){console.warn('Incremental record push failed; queued locally:',e)}finally{pushing=false}}
+ async function pull(force){if(!active||pulling||!navigator.onLine||document.visibilityState==='hidden')return;pulling=true;try{
+   const cursor=force?'':storageGet(CURSOR_KEY,'');
+   let url=endpoint()+'?select=record_key,payload,updated_at,is_deleted&order=updated_at.asc&limit=500';
+   if(cursor)url+='&updated_at=gt.'+encodeURIComponent(cursor);
+   const rows=await request(url,{headers:cloudHeaders()});let newest=cursor;
+   remoteApply=true;
+   try{for(const row of rows){if(!row||!isSyncable(row.record_key))continue;
+      // Local pending edits always win until their queued write succeeds.
+      if(getQueue().includes(row.record_key))continue;
+      if(row.is_deleted){storageRemove(row.record_key)}else{
+        const value=row.payload&&typeof row.payload.raw==='string'?row.payload.raw:JSON.stringify(row.payload);
+        storageSet(row.record_key,value);
+      }
+      if(row.updated_at){storageSet(seenKey(row.record_key),row.updated_at);if(!newest||row.updated_at>newest)newest=row.updated_at;}
+   }}finally{remoteApply=false}
+   if(newest)storageSet(CURSOR_KEY,newest);
+   if(rows.length&&typeof window.kaushalSmartNotesRender==='function')try{window.kaushalSmartNotesRender()}catch(_){}
+   if(rows.length&&typeof planRender==='function')try{planRender()}catch(_){}
+ }catch(e){console.warn('Incremental record pull failed:',e)}finally{pulling=false}}
+ async function activate(){if(active||!cloudEnabled()||!navigator.onLine)return;
+   // Wait for the app's IndexedDB hydration and legacy full-sync baseline before changing sync ownership.
+   if(window.__kbReady)await window.__kbReady;
+   if(!storageGet('cgpsc_srv_ver_v3',''))return;
+   if(!(await tableExists()))return;
+   active=true;
+   // Seed the new table only if it is empty. This is a one-time copy of local cache values; old table is untouched.
+   try{
+     const existing=await request(endpoint()+'?select=record_key&limit=1',{headers:cloudHeaders()});
+     if(!existing.length){const keys=(window.__kbKeys?window.__kbKeys():[]);const rows=[];for(const k of keys){if(isSyncable(k)){const raw=localValue(k);if(raw!==null){rows.push({record_key:k,payload:{raw:raw},is_deleted:false,updated_at:now()})}}}
+       for(let i=0;i<rows.length;i+=40){const batch=rows.slice(i,i+40),saved=await request(endpoint()+'?on_conflict=record_key',{method:'POST',headers:headers(),body:JSON.stringify(batch)});batch.forEach((row,j)=>storageSet(seenKey(row.record_key),saved?.[j]?.updated_at||row.updated_at));}
+     }
+   }catch(e){active=false;console.warn('Incremental sync bootstrap deferred:',e);return}
+   // Disable the legacy whole-payload uploader only after the new table is confirmed and seeded.
+   originalSave=window.cloudSaveNow;originalQueue=window.queueCloudSave;
+   const oldPullLatest=window.cloudPullLatest;
+   window.cloudPullLatest=function(){if(active)return Promise.resolve();return oldPullLatest&&oldPullLatest.apply(this,arguments)};
+   window.cloudSaveNow=function(){if(active){schedule(250);return Promise.resolve()}return originalSave&&originalSave.apply(this,arguments)};
+   window.queueCloudSave=function(){if(active){schedule(700);return}return originalQueue&&originalQueue.apply(this,arguments)};
+   await pull(true);await push();
+   const el=document.getElementById('cloudSyncText');if(el){el.textContent='Incremental sync active';el.dataset.state='ok'}
+ }
+ // Observe app writes through its existing storage abstraction. Remote applies are guarded to avoid echo loops.
+ try{
+   if(typeof storageSet==='function'){const oldSet=storageSet;storageSet=function(k,v){const r=oldSet.apply(this,arguments);markDirty(String(k));return r}}
+   if(typeof storageRemove==='function'){const oldRemove=storageRemove;storageRemove=function(k){const r=oldRemove.apply(this,arguments);markDirty(String(k));return r}}
+   // Catch app modules that write directly to localStorage instead of using storageSet.
+   const proto=Storage.prototype, rawSet=proto.setItem, rawRemove=proto.removeItem;
+   proto.setItem=function(k,v){const r=rawSet.apply(this,arguments);if(this===window.localStorage)markDirty(String(k));return r};
+   proto.removeItem=function(k){const r=rawRemove.apply(this,arguments);if(this===window.localStorage)markDirty(String(k));return r};
+ }catch(e){console.warn('Could not attach local write observer:',e)}
+ window.addEventListener('online',e=>{if(active){e.stopImmediatePropagation();push().then(()=>pull(false));return}activate().then(()=>{push();pull(false)})},true);
+ window.addEventListener('focus',()=>{if(active){push();pull(false)}else activate()});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(active){push();pull(false)}else activate()}});
+ window.addEventListener('pagehide',()=>{if(active&&getQueue().length)push()});
+ (window.__kbReady||Promise.resolve()).then(()=>activate());
+ setInterval(()=>{if(active&&document.visibilityState==='visible'){push();pull(false)}else if(!active)activate()},120000);
+ window.cgpscIncrementalSync={status:()=>({active,queued:getQueue().length,table:TABLE}),syncNow:async()=>{await activate();await push();await pull(false)}};
 })();
 </script>
 </body>
