@@ -22,8 +22,10 @@
   const rawRemove = Storage.prototype.removeItem.bind(localStorage);
   const rawKey = Storage.prototype.key.bind(localStorage);
 
-  // 1. Clean obsolete duplicate cache keys that are safe to drop
-  const OBSOLETE_KEYS = ['cgpsc_cloud_snapshot_v1'];
+  // 1. Obsolete keys that are safe to drop.
+  // FIX: 'cgpsc_cloud_snapshot_v1' used to be listed here, so the tiny local sync-timestamp stub was deleted on every
+  // page load. The app then thought it had never synced, force-pulled the remote copy and wiped offline edits.
+  const OBSOLETE_KEYS = [];
 
   // Study-time log must (a) always stay in real localStorage so it is readable synchronously on boot,
   // and (b) be MERGED (not "longest string wins") when IndexedDB and localStorage disagree.
@@ -48,10 +50,31 @@
   // FIX: sync / study-plan code must wait until IndexedDB has hydrated (heavy notes/banks live only there).
   let hydrationDone = false;
   window.__kbDone = false;
+  window.__idbHydrated = false;           // hydration gate: false until IndexedDB has been opened and merged into memCache
   window.__kbReady = new Promise(function (res) {
-    window.__kbResolve = function () { if (hydrationDone) return; hydrationDone = true; window.__kbDone = true; res(); };
+    window.__kbResolve = function () {
+      if (hydrationDone) return;
+      hydrationDone = true; window.__kbDone = true; window.__idbHydrated = true;
+      res();
+      try { window.dispatchEvent(new CustomEvent('idb-hydrated')); } catch (_) {}
+    };
   });
-  setTimeout(function () { window.__kbResolve(); }, 4000);
+  // Convenience helper: run fn once hydration is complete (immediately if it already is).
+  window.__whenIdbHydrated = function (fn) {
+    if (window.__idbHydrated) { try { fn(); } catch (e) { console.warn(e); } return Promise.resolve(); }
+    return window.__kbReady.then(function () { try { fn(); } catch (e) { console.warn(e); } });
+  };
+  // Safety net only (IndexedDB blocked / hanging). Normal boot resolves from req.onsuccess.
+  setTimeout(function () { window.__kbResolve(); }, 8000);
+
+  // FIX: keys written or deleted in memory since boot. IndexedDB hydration must never clobber these with an older copy
+  // (the old code only protected writes made before the DB opened, and fell back to "longer string wins").
+  const dirtyKeys = new Set();
+  const isEmptyVal = function (v) {
+    if (v === null || v === undefined) return true;
+    const s = String(v).trim();
+    return s === '' || s === '{}' || s === '[]' || s === 'null' || s === '""';
+  };
 
   // 2. Load all existing localStorage data into instant RAM cache
   try {
@@ -118,6 +141,7 @@
     const strVal = String(value);
     if (this === localStorage) {
       memCache.set(key, strVal);
+      if (key !== TS_KEY) dirtyKeys.add(key);
       flushToIDB(key, strVal);
       touchTs(key, false);
 
@@ -144,6 +168,7 @@
   Storage.prototype.removeItem = function(key) {
     if (this === localStorage) {
       memCache.delete(key);
+      if (key !== TS_KEY) dirtyKeys.add(key);
       flushToIDB(key, null);
       touchTs(key, true);
     }
@@ -151,7 +176,8 @@
   };
 
   // 5. Open IndexedDB and hydrate all saved records without overwriting newer data
-  const req = indexedDB.open(DB_NAME, 1);
+  let req;
+  try { req = indexedDB.open(DB_NAME, 1); } catch (err) { console.warn('IndexedDB unavailable:', err); req = {}; setTimeout(function () { window.__kbResolve(); }, 0); }
   req.onupgradeneeded = function(e) {
     const db = e.target.result;
     if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -182,8 +208,14 @@
             memCache.set(k, merged);
             try { rawSet(k, merged); } catch (_) {}
           }
-        } else if (pendingWrites.has(k)) {
-          // written/deleted while IndexedDB was still opening: the in-memory value is the newest
+        } else if (dirtyKeys.has(k) || pendingWrites.has(k)) {
+          // FIX: modified/deleted in memory since boot -> memory is the newest copy and must not be overwritten.
+          // Safety net: boot code that ran before hydration may have written an EMPTY placeholder ('{}', '[]') over data that
+          // only lives in IndexedDB; in that case the stored data wins instead of being lost.
+          if (memCache.has(k) && isEmptyVal(memCache.get(k)) && !isEmptyVal(idbVal) && !(lt < 0)) {
+            memCache.set(k, idbVal);
+            if (String(idbVal).length < 25000) { try { rawSet(k, String(idbVal)); } catch (_) {} }
+          }
         } else if (!memCache.has(k)) {
           // offloaded to IDB earlier -> restore, unless it was deleted afterwards on this device
           if (!(lt < 0 && Math.abs(lt) >= Math.abs(it))) memCache.set(k, idbVal);
@@ -194,8 +226,9 @@
             if (String(idbVal).length < 25000) { try { rawSet(k, String(idbVal)); } catch (_) {} }
           }
         } else if (!lt && !it) {
-          // legacy data without timestamps: keep the old behaviour once
-          if (idbVal && String(idbVal).length > String(memCache.get(k) || '').length) memCache.set(k, idbVal);
+          // legacy data without timestamps. FIX: no more "longer string wins". The key was not modified since boot, so use
+          // the stored copy only when the in-memory one is empty; otherwise keep what localStorage already gave us.
+          if (isEmptyVal(memCache.get(k)) && !isEmptyVal(idbVal)) memCache.set(k, idbVal);
         }
         cursor.continue();
       } else {
@@ -4016,12 +4049,13 @@ function cloudHeaders(){return {'apikey':CLOUD_CONFIG.anonKey,'Authorization':'B
 function cloudEndpoint(){return CLOUD_CONFIG.url.replace(/\/$/,'')+'/rest/v1/'+encodeURIComponent(CLOUD_CONFIG.table)}
 function getTrackerSnapshot(){try{return JSON.parse(localStorage.getItem(TRACKER_KEY)||'{"days":{}}')}catch(e){return {days:{}}}}
 function getFlashcardReviews(){try{return JSON.parse(localStorage.getItem('cgpsc_flashcard_reviews_v1')||'{}')}catch(e){return {}}}
-function buildCloudPayload(){return {version:3,updatedAt:new Date().toISOString(),questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining,tracker:getTrackerSnapshot(),revision:revisionMerge(App.revision,revisionLoad()),plan:planLoad(),flashcardReviews:getFlashcardReviews(),theme:localStorage.getItem('cgpsc_theme')||'day'}}
+function buildCloudPayload(){return {version:3,updatedAt:new Date().toISOString(),questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining,tracker:getTrackerSnapshot(),revision:revisionMerge(App.revision,revisionLoad()),plan:planLoad(),studyTime:stLoad(),flashcardReviews:getFlashcardReviews(),theme:localStorage.getItem('cgpsc_theme')||'day'}}
 /* FIX: the full cloud payload used to be duplicated here (questions, revision, plan, tracker...). Supabase already holds it, so only a tiny timestamp stub is kept locally for sync comparison. */
 function writeLocalSnapshot(payload){try{const stub=JSON.stringify({updatedAt:(payload&&payload.updatedAt)||new Date().toISOString()});try{localStorage.removeItem(CLOUD_LOCAL_KEY)}catch(_){}localStorage.setItem(CLOUD_LOCAL_KEY,stub)}catch(e){}}
 function readLocalSnapshot(){try{return JSON.parse(localStorage.getItem(CLOUD_LOCAL_KEY)||'null')}catch(e){return null}}
 async function cloudSaveNow(){
   if(!cloudEnabled())return;
+  if(window.__kbReady)await window.__kbReady;   /* FIX: never upload before IndexedDB has hydrated memCache (empty state would overwrite the cloud) */
   const payload=buildCloudPayload();
   writeLocalSnapshot(payload);
   if(cloudBusy){cloudQueued=true;return}
@@ -4040,6 +4074,7 @@ function queueCloudSave(){
 }
 async function cloudLoad(){
   if(!cloudEnabled()){cloudStatus('Local backup active');return null}
+  if(window.__kbReady)await window.__kbReady;   /* FIX: wait for IndexedDB hydration before merging cloud data into local storage */
   cloudStatus('Checking cloud…','loading');
   try{
     const r=await fetch(cloudEndpoint()+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&select=payload,updated_at',{headers:cloudHeaders(),cache:'no-store'});
@@ -4047,8 +4082,8 @@ async function cloudLoad(){
     const rows=await r.json();
     let remote=rows?.[0]?.payload||null;
      if(remote){
-       if(remote.revision) revisionSave(remote.revision);
-       if(remote.plan?.days) try{localStorage.setItem(PLAN_KEY,JSON.stringify(remote.plan))}catch(e){}
+       /* FIX: MERGE every global collection (revision, plan, study time, banks, notes, tracker...) instead of overwriting local data */
+       try{applyGlobalData(remote)}catch(e){console.warn('Cloud data merge failed:',e)}
        writeLocalSnapshot(remote);cloudStatus('Synced just now','ok');
      } else cloudStatus('Cloud record empty — local backup active','ok');
      return remote;
@@ -4056,7 +4091,7 @@ async function cloudLoad(){
 }
 let cloudPollTimer=null,cloudPullBusy=false;
 async function cloudPullLatest(){
-  if(!cloudEnabled()||cloudPullBusy||document.visibilityState==='hidden')return;
+  if(!cloudEnabled()||cloudPullBusy||document.visibilityState==='hidden'||window.__idbHydrated===false)return;
   cloudPullBusy=true;
   try{
     const r0=await fetch(cloudEndpoint()+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&select=updated_at',{headers:cloudHeaders(),cache:'no-store'});
@@ -4082,27 +4117,123 @@ async function cloudPullLatest(){
 }
 function startCloudAutoSync(){
   if(!cloudEnabled())return;
+  if(window.__idbHydrated===false){window.addEventListener('idb-hydrated',startCloudAutoSync,{once:true});return}   /* FIX: hydration gate */
   clearInterval(cloudPollTimer);cloudPollTimer=setInterval(cloudPullLatest,5000);cloudPullLatest();
 }
 function stopCloudAutoSync(){clearInterval(cloudPollTimer);cloudPollTimer=null}
 
-function applySnapshot(saved){
+/* ---------- MERGE HELPERS (used by applySnapshot + cloudLoad) ---------- */
+const _isObj=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+const _ts=v=>Date.parse(v||'')||0;
+function _readJSON(key,def){try{const x=JSON.parse(storageGet(key,'')||'null');return x==null?def:x}catch(e){return def}}
+/* Question banks: merge arrays by question id. When the last-synced id list is known, a question that was synced earlier but is now
+   missing on one side counts as deleted there (and is not resurrected). */
+function bankMerge(local,remote,baseIds){
+  local=_isObj(local)?local:{};remote=_isObj(remote)?remote:{};
+  const out={};
+  new Set([...Object.keys(local),...Object.keys(remote)]).forEach(subject=>{
+    const la=Array.isArray(local[subject])?local[subject]:[],ra=Array.isArray(remote[subject])?remote[subject]:[];
+    const base=baseIds&&Array.isArray(baseIds[subject])?new Set(baseIds[subject]):null;
+    const lids=new Set(la.map(q=>q&&q.id)),rids=new Set(ra.map(q=>q&&q.id));
+    const map=new Map(),order=[];
+    [...la,...ra].forEach(q=>{
+      if(!q||q.id===undefined||q.id===null)return;
+      if(base&&base.has(q.id)&&!(lids.has(q.id)&&rids.has(q.id)))return;   /* deleted on the other side */
+      if(!map.has(q.id)){map.set(q.id,q);order.push(q.id)}
+      else{const o=map.get(q.id);map.set(q.id,_ts(q.updatedAt||q.importedAt)>_ts(o.updatedAt||o.importedAt)?q:o)}
+    });
+    out[subject]=order.map(id=>map.get(id));
+  });
+  return out;
+}
+/* Notes: merge by note id, newest updatedAt wins; completion records (quiz / reading / lottery) are always kept at their newest value. */
+function noteMergeMarks(base,other){
+  if(!base||!other)return base||other;
+  const out={...base};
+  if(_ts(other.lotteryDoneAt)>_ts(base.lotteryDoneAt))out.lotteryDoneAt=other.lotteryDoneAt;
+  if(other.lastQuiz&&(!base.lastQuiz||_ts(other.lastQuiz.at)>_ts(base.lastQuiz.at)))out.lastQuiz=other.lastQuiz;
+  const qa=Math.max(+base.quizAttempts||0,+other.quizAttempts||0),qb=Math.max(+base.quizBest||0,+other.quizBest||0);
+  if(qa)out.quizAttempts=qa;if(qb)out.quizBest=qb;
+  const rd=[...new Set([...(Array.isArray(base.readDays)?base.readDays:[]),...(Array.isArray(other.readDays)?other.readDays:[])])].sort();
+  if(rd.length)out.readDays=rd.slice(-120);
+  if(_ts(other.lastReadAt)>_ts(base.lastReadAt))out.lastReadAt=other.lastReadAt;
+  return out;
+}
+function notesMerge(local,remote,deletedIds){
+  const ln=notesNormalize(local),rn=notesNormalize(remote),del=new Set((deletedIds||[]).map(String)),out={};
+  new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(subject=>{
+    const map=new Map(),order=[];
+    [...(ln[subject]||[]),...(rn[subject]||[])].forEach(n=>{
+      if(!n||n.id===undefined||n.id===null||del.has(String(n.id)))return;
+      if(!map.has(n.id)){map.set(n.id,n);order.push(n.id)}
+      else{const o=map.get(n.id),newer=_ts(n.updatedAt)>_ts(o.updatedAt);map.set(n.id,noteMergeMarks(newer?n:o,newer?o:n))}
+    });
+    out[subject]=order.map(id=>map.get(id));
+  });
+  return out;
+}
+/* Question tracker: merge `days` (date -> question key -> {correct,wrong}) and any other plain-object section such as `status`. */
+function trackerMergeDay(a,b){
+  const has=x=>x&&typeof x==='object'&&((x.correct!==null&&x.correct!==undefined)||(x.wrong!==null&&x.wrong!==undefined));
+  const out={...(_isObj(a)?a:{})};
+  Object.entries(_isObj(b)?b:{}).forEach(([k,v])=>{const cur=out[k];if(cur===undefined||(!has(cur)&&has(v)))out[k]=v});
+  return out;
+}
+function trackerMerge(local,remote){
+  const L=_isObj(local)?local:{},R=_isObj(remote)?remote:{},out={...R,...L};
+  const days={},Ld=_isObj(L.days)?L.days:{},Rd=_isObj(R.days)?R.days:{};
+  new Set([...Object.keys(Ld),...Object.keys(Rd)]).forEach(d=>{
+    const l=Ld[d],r=Rd[d];
+    if(l===undefined)days[d]=r;else if(r===undefined)days[d]=l;
+    else if(_isObj(l)&&_isObj(r))days[d]=trackerMergeDay(l,r);
+    else days[d]=_isObj(l)?l:r;
+  });
+  out.days=days;
+  new Set([...Object.keys(L),...Object.keys(R)]).forEach(k=>{
+    if(k==='days')return;
+    if(_isObj(L[k])&&_isObj(R[k]))out[k]=trackerMergeDay(L[k],R[k]);   /* e.g. status objects */
+  });
+  return out;
+}
+function flashcardReviewsMerge(local,remote){
+  const L=_isObj(local)?local:{},R=_isObj(remote)?remote:{},out={...R},stamp=v=>_isObj(v)?Math.max(_ts(v.updatedAt),_ts(v.at),_ts(v.reviewedAt),_ts(v.lastReviewed),_ts(v.last)):0;
+  Object.entries(L).forEach(([k,v])=>{out[k]=(k in R&&stamp(R[k])>stamp(v))?R[k]:v});
+  return out;
+}
+/* GLOBAL data (everything except the active exam) always syncs, whether or not an exam is loaded in the snapshot. */
+function applyGlobalData(saved){
+  if(!saved||typeof saved!=='object')return;
+  const S2=(name,f)=>{try{f()}catch(e){console.warn('Sync: could not merge '+name,e)}};
+  S2('deleted notes',()=>{if(Array.isArray(saved.deletedNotes)&&saved.deletedNotes.length){const k='cgpsc_deleted_note_ids_v1',set=new Set((_readJSON(k,[])||[]).map(String));saved.deletedNotes.forEach(i=>set.add(String(i)));storageSet(k,JSON.stringify([...set]))}});
+  S2('study time',()=>{if(saved.studyTime&&typeof saved.studyTime==='object')storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),saved.studyTime)))});
+  S2('daily plan',()=>{if(saved.plan&&saved.plan.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),saved.plan)))});
+  S2('question banks',()=>{if(_isObj(saved.questionBanks))storageSet(QUESTION_BANKS_KEY,JSON.stringify(bankMerge(bankLoad(),saved.questionBanks,_readJSON('cgpsc_bank_base_ids_v1',null))))});
+  S2('notes',()=>{if(_isObj(saved.notes)){const del=(_readJSON('cgpsc_deleted_note_ids_v1',[])||[]);storageSet(NOTES_KEY,JSON.stringify(notesMerge(notesLoad(),saved.notes,del)))}});
+  S2('question tracker',()=>{if(saved.tracker&&saved.tracker.days)storageSet(TRACKER_KEY,JSON.stringify(trackerMerge(getTrackerSnapshot(),saved.tracker)))});
+  S2('revision queue',()=>{if(Array.isArray(saved.revision)){App.revision=revisionMerge(revisionLoad(),saved.revision);revisionSave(App.revision)}});
+  S2('flashcard reviews',()=>{if(_isObj(saved.flashcardReviews))storageSet('cgpsc_flashcard_reviews_v1',JSON.stringify(flashcardReviewsMerge(getFlashcardReviews(),saved.flashcardReviews)))});
+  S2('theme',()=>{if(saved.theme)setTheme(saved.theme)});
+}
+/* ACTIVE EXAM restoration (only when the snapshot really carries an exam). */
+function applyActiveExam(saved){
   if(!saved||!Array.isArray(saved.questions)||!saved.questions.length||!saved.state)return false;
   try{
     App.questions=validateData(saved.questions);App.cfg={...App.cfg,...(saved.cfg||{})};
     App.state={...App.state,...saved.state,answers:{...(saved.state.answers||{})},status:{...(saved.state.status||{})}};
     App.startRemaining=Number(saved.startRemaining)||App.state.remaining||0;
     App.questions.forEach(q=>{if(!App.state.status[q.id])App.state.status[q.id]=App.state.answers[q.id]?'answered':'not-visited'});
-    if(saved.tracker&&saved.tracker.days)try{localStorage.setItem(TRACKER_KEY,JSON.stringify(saved.tracker))}catch(e){}
-    if(saved.revision)try{App.revision=revisionMerge([],saved.revision);revisionSave(App.revision)}catch(e){}
-    if(saved.plan?.days)try{localStorage.setItem(PLAN_KEY,JSON.stringify(saved.plan))}catch(e){}
-    if(saved.flashcardReviews&&typeof saved.flashcardReviews==='object')try{localStorage.setItem('cgpsc_flashcard_reviews_v1',JSON.stringify(saved.flashcardReviews))}catch(e){}
-    if(saved.theme)setTheme(saved.theme);
     if(App.state.started&&App.state.remaining>0){$('infoText').textContent=`Saved exam found • ${App.questions.length} questions • ${Math.ceil(App.state.remaining/60)} minutes remaining`;$('examInfo').classList.remove('hidden');$('startBtn').textContent='RESUME SAVED EXAM';$('startBtn').dataset.resume='1';return true}
     return false;
-  }catch(e){console.warn('Saved snapshot was ignored:',e);return false}
+  }catch(e){console.warn('Saved exam was ignored:',e);return false}
+}
+function applySnapshot(saved){
+  if(!saved||typeof saved!=='object')return false;
+  /* FIX: global data used to be skipped whenever saved.questions was empty (no exam loaded). It is now applied first and independently. */
+  try{applyGlobalData(saved)}catch(e){console.warn('Global data merge failed:',e)}
+  return applyActiveExam(saved);
 }
 function save(){
+  if(window.__idbHydrated===false)return;   /* FIX: never persist pre-hydration (empty) state */
   const payload=buildCloudPayload();
   try{localStorage.setItem('cgpsc_mock_v2',JSON.stringify({questions:App.questions,cfg:App.cfg,state:App.state,startRemaining:App.startRemaining}));writeLocalSnapshot(payload)}catch(e){console.warn('Progress could not be saved:',e)}
   queueCloudSave();
@@ -5254,8 +5385,7 @@ function hubOpen(){setActiveView('hub');$('start').classList.add('hidden');$('re
 function hubClose(){setActiveView('home');$('studyHubScreen').classList.add('hidden');$('start').classList.remove('hidden');window.scrollTo(0,0)}
 function hubInit(){bankInitSelect();bankRenderSummary();bankRenderHub();$('bankFileInput')?.addEventListener('change',e=>bankLoadJsonFile(e.target.files?.[0]));$('addBankBtn')?.addEventListener('click',bankAddFromInput);$('loadBtn')?.addEventListener('click',()=>{try{validateData(JSON.parse($('jsonInput').value));$('error').textContent='JSON is valid. Choose the subject and click “Add to Question Bank”.';}catch(e){$('error').textContent='Error: '+e.message}});$('studyHubHomeBtn')?.addEventListener('click',hubOpen);$('studyHubBackBtn')?.addEventListener('click',hubClose);$('studyHubRefreshBtn')?.addEventListener('click',bankRenderHub);$('hubImportBtn')?.addEventListener('click',()=>{hubClose();$('bankSubjectSelect')?.focus();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})})}
 const _oldBuildCloudPayload=buildCloudPayload;buildCloudPayload=function(){const p=_oldBuildCloudPayload();p.version=4;p.questionBanks=bankLoad();p.notes=notesLoad();return p};
-const _oldApplySnapshot=applySnapshot;applySnapshot=function(saved){const ok=_oldApplySnapshot(saved);if(saved?.questionBanks&&typeof saved.questionBanks==='object'){try{localStorage.setItem(QUESTION_BANKS_KEY,JSON.stringify(saved.questionBanks))}catch(e){}}if(saved?.notes&&typeof saved.notes==='object'){try{localStorage.setItem(NOTES_KEY,JSON.stringify(saved.notes))}catch(e){}}return ok};
-const _oldCloudLoad=cloudLoad;cloudLoad=async function(){const remote=await _oldCloudLoad();if(remote?.questionBanks&&typeof remote.questionBanks==='object'){try{localStorage.setItem(QUESTION_BANKS_KEY,JSON.stringify(remote.questionBanks))}catch(e){}}if(remote?.notes&&typeof remote.notes==='object'){try{localStorage.setItem(NOTES_KEY,JSON.stringify(remote.notes))}catch(e){}}return remote};
+/* FIX: applySnapshot()/cloudLoad() now MERGE question banks and notes themselves (applyGlobalData); the old wrappers here overwrote them wholesale. */
 const _oldRestoreActiveView=restoreActiveView;restoreActiveView=function(){const view=getActiveView();if(view==='hub'&&typeof hubOpen==='function'){hubOpen();return}_oldRestoreActiveView()};
 hubInit();
 
@@ -5773,7 +5903,7 @@ mk('Export Backup',()=>{try{const {data,mem}=window.__kbCollect(),n=Object.keys(
 function syncSig(){return hashStr(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionMerge(App.revision,revisionLoad()),storageGet(ATT_KEY,''),App.state.answers,App.questions.length]))}
 const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.updatedAt=storageGet(EDIT_KEY,new Date(0).toISOString());try{p.attempts=JSON.parse(storageGet(ATT_KEY,'[]')||'[]')}catch(e){p.attempts=[]}return p};
 queueCloudSave=function(){if(!cloudEnabled())return;try{writeLocalSnapshot(buildCloudPayload())}catch(e){}if(!cloudReady)return;const s=syncSig();if(s!==storageGet(SIG_KEY)){storageSet(EDIT_KEY,new Date().toISOString());storageSet(SIG_KEY,s)}clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(cloudSaveNow,$('exam').classList.contains('hidden')?800:20000)};
-function applyCollections(s){if(!s)return;if(s.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(s.questionBanks));if(s.notes)storageSet(NOTES_KEY,JSON.stringify(s.notes));if(s.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(s.tracker));if(Array.isArray(s.revision)){App.revision=s.revision;storageSet(REVISION_KEY,JSON.stringify(s.revision))}if(s.plan?.days)storageSet(PLAN_KEY,JSON.stringify(s.plan));if(Array.isArray(s.attempts))storageSet(ATT_KEY,JSON.stringify(s.attempts))}
+function applyCollections(s){if(!s)return;applyGlobalData(s);if(Array.isArray(s.attempts)){try{storageSet(ATT_KEY,JSON.stringify(s.attempts))}catch(e){}}}
 function refreshViews(){S(()=>{revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 const _as=applySnapshot;applySnapshot=function(s){S(()=>applyCollections(s));const r=_as(s);S(()=>storageSet(SIG_KEY,syncSig()));refreshViews();return r};
 cloudPullLatest=async function(){if(!cloudEnabled()||!cloudReady||cloudPullBusy||document.visibilityState==='hidden'||!$('exam').classList.contains('hidden'))return;cloudPullBusy=true;try{const r=await fetch(cloudEndpoint()+'?id=eq.'+encodeURIComponent(CLOUD_CONFIG.rowId)+'&select=payload,updated_at',{headers:cloudHeaders(),cache:'no-store'});if(!r.ok)throw Error('refresh '+r.status);const rows=await r.json(),remote=rows?.[0]?.payload,localAt=Date.parse(storageGet(EDIT_KEY,'')||0)||0;if(!remote){if(localAt)cloudSaveNow();return}const remoteAt=Date.parse(remote.updatedAt||rows[0].updated_at||0)||0;if(remoteAt>localAt){applySnapshot(remote);storageSet(EDIT_KEY,new Date(remoteAt).toISOString());writeLocalSnapshot(remote);cloudStatus('Updated from another device','ok')}else if(localAt>remoteAt)cloudSaveNow()}catch(e){console.warn(e)}finally{cloudPullBusy=false}};
@@ -5797,7 +5927,7 @@ function migBank(b){const o={};Object.keys(b||{}).forEach(s=>{const seen=new Set
 normalize=function(q,i){const x={...q};x.id=x.id??i+1;x.type=x.type||((x.assertion&&x.reason)?'assertion_reason':(x.statements?'multiple_statement':(x.pairs?'match_following':'mcq')));x.topic=x.topic||'General';let o=x.options||{};if(Array.isArray(o))o=Object.fromEntries(o.map((v,n)=>[String.fromCharCode(65+n),v]));x.options=Object.fromEntries(Object.entries(o).map(([k,v])=>[String(k).trim().toUpperCase(),v]));if(x.answer!=null)x.answer=String(x.answer).trim().toUpperCase();return x};
 bankNormalizeQuestions=function(d,s){const arr=d;if(!Array.isArray(arr)||!arr.length)throw Error('Question bank must be a non-empty JSON array.');const out=arr.map(normalize);out.forEach((q,i)=>{const n='Question '+(i+1)+': ';if(Object.keys(q.options).length<2)throw Error(n+'needs at least 2 options.');if(!q.answer||!(q.answer in q.options))throw Error(n+'answer "'+(q.answer??'')+'" is missing or not one of the options.');if(q.type==='multiple_statement'&&!Array.isArray(q.statements))throw Error(n+'"statements" array missing.');if(q.type==='assertion_reason'&&!(q.assertion&&q.reason))throw Error(n+'needs "assertion" and "reason".');if(q.type==='match_following'&&!Array.isArray(q.pairs))throw Error(n+'"pairs" array missing.');if(q.type==='mcq'&&!(q.question||q.question_intro))throw Error(n+'"question" missing.')});return out.map(q=>({...q,id:qid(s,q),sourceId:q.id,subject:s,bankSubject:s,importedAt:new Date().toISOString()}))};
 /* one-time migration of stored banks (answers upper-cased, stable content ids) */
-S(()=>{if(storageGet(MIG))return;storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(bankLoad())));if(!storageGet('cgpsc_last_edit_v1')){const sn=readLocalSnapshot();storageSet('cgpsc_last_edit_v1',sn?.updatedAt||new Date(0).toISOString())}storageSet(MIG,'1')});
+(window.__kbReady||Promise.resolve()).then(()=>S(()=>{if(storageGet(MIG))return;storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(bankLoad())));if(!storageGet('cgpsc_last_edit_v1')){const sn=readLocalSnapshot();storageSet('cgpsc_last_edit_v1',sn?.updatedAt||new Date(0).toISOString())}storageSet(MIG,'1')}));   /* FIX: ran before IndexedDB hydration, saw empty banks and marked the migration done */
 const boot={rev:revisionLoad(),plan:planLoad(),notes:notesLoad(),trk:getTrackerSnapshot()};
 if(window.__kbReady)window.__kbReady.then(()=>S(()=>{boot.rev=revisionLoad();boot.plan=planLoad();boot.notes=notesLoad();boot.trk=getTrackerSnapshot()}));  /* FIX: boot snapshot was taken before IndexedDB hydration */
 
@@ -5863,7 +5993,7 @@ function union(remote){
  if(remote.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),remote.studyTime)));
  dropDeleted();
 }
-function takeRemote(r){mergeDeleted(r.deletedNotes);if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(r.tracker));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)));dropDeleted()}
+function takeRemote(r){mergeDeleted(r.deletedNotes);if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(trackerMerge(getTrackerSnapshot(),r.tracker)));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));if(r.studyTime)storageSet(STT_KEY,JSON.stringify(stMerge(stLoad(),r.studyTime)));dropDeleted()}
 function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 applySnapshot=function(){return false};   /* never load another device's exam state */
 async function pull(full){
