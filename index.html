@@ -20,7 +20,7 @@
   } catch (e) { console.warn('Local reset could not complete:', e); }
 })();
 </script>
-\n<script id="kaushal-unlimited-storage-bridge">
+<script id="kaushal-unlimited-storage-bridge">
 /* ============================================================
    ZERO-DATA-LOSS UNLIMITED STORAGE ENGINE (IndexedDB + RAM Cache)
    Automatically migrates full localStorage into IndexedDB,
@@ -6994,6 +6994,9 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     const savedSource=String(found.pdfUrl||found.sourceUrl||'').trim();
     if(savedSource){
       if(window.kaushalOpenSourceLink(savedSource)){
+        // Let the dashboard count a source-link note as read only after the user
+        // has spent at least 15 seconds in the opened tab and returns to this app.
+        try{if(typeof window.kaushalNoteSourceOpened==='function')window.kaushalNoteSourceOpened(found.id)}catch(e){}
         if(/^file:\/\//i.test(savedSource)&&window.location.protocol!=='file:'){
           say('Local file link opening was attempted. Browsers may block file:/// links when this app is hosted online; open the app from a local HTML file to use local files.');
         }
@@ -7679,7 +7682,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     const idx={};days.forEach((d,i)=>idx[d.key]=i);
     const readToday=[];let saved=0,pool=0,resting=0;
     notes.forEach(n=>{
-      if(!String(n.html||'').trim())return;
+      // Notes added through the URL-first editor intentionally store html:'':
+      // count HTML notes and PDF/source-link notes alike in dashboard totals.
+      const hasContent=String(n.html||'').trim()||String(n.pdfUrl||n.sourceUrl||'').trim();
+      if(!hasContent)return;
       saved++;
       const inSyllabus=String(n.topic||'').includes(' › '),t=Date.parse(n.lotteryDoneAt||'');
       const focusToday=!isNaN(t)&&dayKey(new Date(t))===today;
@@ -7796,6 +7802,19 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     });
     if(hit){saveNotes(d);paintDash()}
   }
+  // Source links open in another tab, so the in-app reader observer cannot see
+  // them. Track the tab switch and count the note after >=15 seconds away, on return.
+  let sourceReadPending=null;
+  window.kaushalNoteSourceOpened=function(id){sourceReadPending={id:String(id),hiddenAt:0};};
+  document.addEventListener('visibilitychange',function(){
+    if(!sourceReadPending)return;
+    if(document.visibilityState==='hidden'){
+      if(!sourceReadPending.hiddenAt)sourceReadPending.hiddenAt=Date.now();
+      return;
+    }
+    const pending=sourceReadPending;sourceReadPending=null;
+    if(pending.hiddenAt&&Date.now()-pending.hiddenAt>=READ_SECS*1000)markRead(pending.id);
+  });
   function paintReaderTest(id){
     const host=$('noteReaderSubject')&&$('noteReaderSubject').parentNode;if(!host)return;
     let b=$('ntdReaderTest');
