@@ -6,7 +6,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>KAUSHAL • Study Command Center</title>
 
-<script id="kaushal-unlimited-storage-bridge">
+<script id="fresh-supabase-account-reset">
+/* One-time local reset for connecting a new Supabase project.
+   This clears this app's browser cache only, not records in the old Supabase project. */
+(function(){
+  const marker = '__kaushal_new_supabase_reset_v1__';
+  try {
+    if (localStorage.getItem(marker) !== 'done') {
+      localStorage.clear();
+      try { indexedDB.deleteDatabase('KaushalStudyCenterDB'); } catch (_) {}
+      localStorage.setItem(marker, 'done');
+    }
+  } catch (e) { console.warn('Local reset could not complete:', e); }
+})();
+</script>
+\n<script id="kaushal-unlimited-storage-bridge">
 /* ============================================================
    ZERO-DATA-LOSS UNLIMITED STORAGE ENGINE (IndexedDB + RAM Cache)
    Automatically migrates full localStorage into IndexedDB,
@@ -14,7 +28,7 @@
    QuotaExceededError permanently without losing any data.
    ============================================================ */
 (function() {
-  const DB_NAME = 'KaushalStudyCenterDB';
+  const DB_NAME = 'KaushalStudyCenterDB_NewSupabase';
   const STORE_NAME = 'kv_store';
   const memCache = new Map();
   const rawGet = Storage.prototype.getItem.bind(localStorage);
@@ -120,6 +134,39 @@
       console.warn('IndexedDB write warning:', err);
     }
   }
+
+  // Awaitable persistence for important user content. The synchronous localStorage
+  // facade updates RAM immediately; this helper resolves only after IndexedDB commits.
+  window.__kbPersistKey = function (key) {
+    const ready = window.__kbReady || Promise.resolve();
+    return Promise.resolve(ready).then(function () {
+      return new Promise(function (resolve, reject) {
+        const value = memCache.has(key) ? memCache.get(key) : rawGet(key);
+        if (!dbInstance) {
+          // IndexedDB may be unavailable in a restricted file:// / private context.
+          // Keep a localStorage copy whenever the browser still permits it.
+          try {
+            if (value !== null && value !== undefined) rawSet(key, String(value));
+            if (value === null || rawGet(key) === String(value)) resolve(true);
+            else reject(new Error('The browser could not persist this item locally.'));
+          } catch (err) { reject(err); }
+          return;
+        }
+        let tx;
+        try {
+          tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+          const store = tx.objectStore(STORE_NAME);
+          if (value === null || value === undefined) store.delete(key);
+          else store.put(String(value), key);
+          // Commit the timestamp map in the same transaction as the content.
+          store.put(JSON.stringify(tsMap), TS_KEY);
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror = function () { reject(tx.error || new Error('IndexedDB could not save this item.')); };
+          tx.onabort = function () { reject(tx.error || new Error('IndexedDB save was interrupted.')); };
+        } catch (err) { reject(err); }
+      });
+    });
+  };
 
   Storage.prototype.getItem = function(key) {
     if (this === localStorage) {
@@ -3866,7 +3913,7 @@ function renderMatch(box,q){let ins=document.createElement('div');ins.className=
 function renderOptions(q){let c=$('options');c.innerHTML='';Object.entries(q.options||{}).forEach(([key,val])=>{let label=document.createElement('label');label.className='option';let input=document.createElement('input');input.type='radio';input.name='qopt';input.value=key;input.checked=App.state.answers[q.id]===key;let k=document.createElement('span');k.className='option-key';k.textContent=key+'.';let v=document.createElement('span');v.textContent=val;label.append(input,k,v);if(input.checked)label.classList.add('selected');input.onchange=()=>{const wasAnswered=!!App.state.answers[q.id];App.state.answers[q.id]=key;App.state.status[q.id]='answered';if(!wasAnswered)trackerRecordQuestion(q);if(String(key).toUpperCase()!==String(q.answer).toUpperCase())revisionRecordQuestion(q,key);document.querySelectorAll('.option').forEach(x=>x.classList.remove('selected'));label.classList.add('selected');renderPalette();save()};c.appendChild(label)});if(window.kaushalFormatChemistry)window.kaushalFormatChemistry(c)}
 function renderPalette(){let c=$('paletteGrid');c.innerHTML='';App.questions.forEach((q,i)=>{let b=document.createElement('button');b.className='qbtn';let st=App.state.status[q.id];if(st==='answered')b.classList.add('answered');if(st==='marked')b.classList.add('marked');if(st==='ansmarked')b.classList.add('ansmarked');if(st==='not-answered'||st==='visited')b.classList.add('not-answered');if(i===App.state.index)b.classList.add('current');b.textContent=i+1;b.onclick=()=>{App.state.index=i;if(App.state.status[q.id]==='not-visited')App.state.status[q.id]='visited';render();renderPalette();setPalette(false)};c.appendChild(b)})}
 function next(){if(App.state.index===App.questions.length-1){showConfirm();return}App.state.index++;visit();render();renderPalette();save()}function prev(){if(App.state.index>0){App.state.index--;visit();render();renderPalette();save()}}function visit(){let id=App.questions[App.state.index].id;if(App.state.status[id]==='not-visited')App.state.status[id]='visited'}
-$('nextBtn').onclick=next;$('prevBtn').onclick=prev;$('clearBtn').onclick=()=>{const q=App.questions[App.state.index],id=q.id,wasMarked=App.state.status[id]==='marked'||App.state.status[id]==='ansmarked';delete App.state.answers[id];App.state.status[id]=wasMarked?'marked':'not-answered';if(typeof trackerClearQuestion==='function')trackerClearQuestion(q);render();renderPalette();save()};$('markBtn').onclick=()=>{let q=App.questions[App.state.index],id=q.id;App.state.status[id]=App.state.answers[id]?'ansmarked':'marked';if(App.state.index<App.questions.length-1)App.state.index++;visit();render();renderPalette();save()};
+$('nextBtn').onclick=next;$('prevBtn').onclick=prev;$('clearBtn').onclick=()=>{const q=App.questions[App.state.index];if(!q||!App.state)return;const id=String(q.id),wasMarked=App.state.status[id]==='marked'||App.state.status[id]==='ansmarked';delete App.state.answers[id];App.state.status[id]=wasMarked?'marked':'not-answered';if(typeof trackerClearQuestion==='function')trackerClearQuestion(q);render();renderPalette();save();try{if(typeof toast==='function')toast('Answer cleared for this question.')}catch(e){}};$('markBtn').onclick=()=>{let q=App.questions[App.state.index],id=q.id;App.state.status[id]=App.state.answers[id]?'ansmarked':'marked';if(App.state.index<App.questions.length-1)App.state.index++;visit();render();renderPalette();save()};
 function setPalette(open){const p=$('palette'),back=$('paletteBackdrop');p.classList.toggle('open',open);back.classList.toggle('hidden',!open);p.setAttribute('aria-hidden',String(!open));$('mobilePalette').setAttribute('aria-expanded',String(open));$('paletteTopBtn').setAttribute('aria-expanded',String(open));document.body.classList.toggle('drawer-open',open);if(open){renderPalette();requestAnimationFrame(()=>$('closePalette')?.focus({preventScroll:true}))}}
 $('mobilePalette').onclick=()=>setPalette(!$('palette').classList.contains('open'));$('paletteTopBtn').onclick=()=>setPalette(!$('palette').classList.contains('open'));$('closePalette').onclick=()=>setPalette(false);$('paletteBackdrop').onclick=()=>setPalette(false);
 function setDisplayMenu(open){$('displayMenu').classList.toggle('hidden',!open);$('displayMenuBtn').setAttribute('aria-expanded',String(open))}
@@ -3956,8 +4003,8 @@ function revisionClose(){setActiveView('home');$('revisionScreen').classList.add
    Configure the Supabase project URL + anon key in CLOUD_CONFIG below.
    The app keeps localStorage as an offline cache and syncs one shared record. */
 const CLOUD_CONFIG={
-  url:'https://mlfsgxxdjcvweewgbnjk.supabase.co',
-  anonKey:'sb_publishable_h2U_XWWgdNpGMxnmVNvJTg_uqnt57UR', // Supabase anon/public key
+  url:'https://vzgdpzuhuowqpzddsbzg.supabase.co',
+  anonKey:'sb_publishable_aD005Q7FEEKdOsRfV58A3w_AGVJ4Kmg',
   table:'cgpsc_progress',
   rowId:'00000000-0000-0000-0000-000000000001'
 };
@@ -4126,7 +4173,7 @@ function applyGlobalData(saved){
   const S2=(name,f)=>{try{f()}catch(e){console.warn('Sync: could not merge '+name,e)}};
   S2('deleted notes',()=>{if(Array.isArray(saved.deletedNotes)&&saved.deletedNotes.length){const k='cgpsc_deleted_note_ids_v1',set=new Set((_readJSON(k,[])||[]).map(String));saved.deletedNotes.forEach(i=>set.add(String(i)));storageSet(k,JSON.stringify([...set]))}});
   S2('daily plan',()=>{if(saved.plan&&saved.plan.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),saved.plan)))});
-  S2('question banks',()=>{if(_isObj(saved.questionBanks))storageSet(QUESTION_BANKS_KEY,JSON.stringify(bankMerge(bankLoad(),saved.questionBanks,_readJSON('cgpsc_bank_base_ids_v1',null))))});
+  S2('question banks',()=>{if(_isObj(saved.questionBanks)){mergeDeletedQuestions(saved.deletedQuestions);const merged=bankMerge(bankLoad(),saved.questionBanks,_readJSON('cgpsc_bank_base_ids_v1',null));storageSet(QUESTION_BANKS_KEY,JSON.stringify(filterDeletedQuestionBanks(merged)))}});
   S2('notes',()=>{if(_isObj(saved.notes)){const del=(_readJSON('cgpsc_deleted_note_ids_v1',[])||[]);storageSet(NOTES_KEY,JSON.stringify(notesMerge(notesLoad(),saved.notes,del)))}});
   S2('question tracker',()=>{if(saved.tracker&&saved.tracker.days)storageSet(TRACKER_KEY,JSON.stringify(trackerMerge(getTrackerSnapshot(),saved.tracker)))});
   S2('revision queue',()=>{if(Array.isArray(saved.revision)){App.revision=revisionMerge(revisionLoad(),saved.revision);revisionSave(App.revision)}});
@@ -5210,9 +5257,50 @@ $('quickQuizStartBtn')?.addEventListener('click',quickQuizStart);
 
 /* ---------- SUBJECT-WISE QUESTION BANKS / STUDY HUB ---------- */
 const QUESTION_BANKS_KEY='cgpsc_question_banks_v1';
+const QUESTION_DELETE_KEY='cgpsc_deleted_question_ids_v1';
 const BANK_SUBJECTS=['Chhattisgarh General Studies','Hindi','English','Chhattisgarhi','Reasoning & Logical Ability','Mental Ability','Mathematics & Statistics','Chemistry','Physics','Biology','Technology','Environment','Agriculture','Forestry','Current Affairs'];
-function bankLoad(){try{const x=JSON.parse(storageGet(QUESTION_BANKS_KEY,'{}')||'{}');return x&&typeof x==='object'?x:{}}catch(e){return {}}}
-function bankSave(data){try{storageSet(QUESTION_BANKS_KEY,JSON.stringify(data));queueCloudSave()}catch(e){console.warn('Question banks could not be saved:',e)}}
+function readBankStored(){try{const x=JSON.parse(storageGet(QUESTION_BANKS_KEY,'{}')||'{}');return x&&typeof x==='object'&&!Array.isArray(x)?x:{}}catch(e){return {}}}
+function questionDeleteEntries(){
+  try{
+    const raw=JSON.parse(storageGet(QUESTION_DELETE_KEY,'[]')||'[]');
+    if(Array.isArray(raw))return raw.filter(x=>x&&x.bank!=null&&x.id!=null).map(x=>({bank:String(x.bank),id:String(x.id)}));
+    if(raw&&typeof raw==='object')return Object.entries(raw).flatMap(([bank,ids])=>(Array.isArray(ids)?ids:[]).map(id=>({bank:String(bank),id:String(id)})));
+  }catch(e){}
+  return [];
+}
+function questionDeleteMap(entries=questionDeleteEntries()){const m=new Map();(entries||[]).forEach(x=>{if(x&&x.bank!=null&&x.id!=null)m.set(String(x.bank)+'\u0000'+String(x.id),{bank:String(x.bank),id:String(x.id)})});return m}
+function mergeDeletedQuestions(remote){
+  if(!remote)return;
+  const m=questionDeleteMap(),before=m.size;
+  if(Array.isArray(remote))remote.forEach(x=>{if(x&&x.bank!=null&&x.id!=null)m.set(String(x.bank)+'\u0000'+String(x.id),{bank:String(x.bank),id:String(x.id)})});
+  else if(remote&&typeof remote==='object')Object.entries(remote).forEach(([bank,ids])=>(Array.isArray(ids)?ids:[]).forEach(id=>m.set(String(bank)+'\u0000'+String(id),{bank:String(bank),id:String(id)})));
+  if(m.size!==before)storageSet(QUESTION_DELETE_KEY,JSON.stringify([...m.values()]));
+}
+function filterDeletedQuestionBanks(data,entries=questionDeleteEntries()){
+  const gone=questionDeleteMap(entries),out={};
+  Object.entries(data&&typeof data==='object'&&!Array.isArray(data)?data:{}).forEach(([bank,arr])=>{
+    out[bank]=(Array.isArray(arr)?arr:[]).filter(q=>!q||q.id==null||!gone.has(String(bank)+'\u0000'+String(q.id)));
+  });
+  return out;
+}
+function bankLoad(){return filterDeletedQuestionBanks(readBankStored())}
+function bankSave(data){
+  try{
+    const previous=readBankStored(),next=data&&typeof data==='object'&&!Array.isArray(data)?data:{};
+    const tombstones=questionDeleteMap();
+    // Any previously stored question that is absent from the new bank set was intentionally deleted.
+    Object.entries(previous).forEach(([bank,arr])=>{
+      const now=new Set((Array.isArray(next[bank])?next[bank]:[]).filter(q=>q&&q.id!=null).map(q=>String(q.id)));
+      (Array.isArray(arr)?arr:[]).forEach(q=>{if(q&&q.id!=null&&!now.has(String(q.id)))tombstones.set(String(bank)+'\u0000'+String(q.id),{bank:String(bank),id:String(q.id)})});
+    });
+    // If a deleted question is deliberately imported again, remove its tombstone.
+    Object.entries(next).forEach(([bank,arr])=>(Array.isArray(arr)?arr:[]).forEach(q=>{if(q&&q.id!=null)tombstones.delete(String(bank)+'\u0000'+String(q.id))}));
+    const tombstoneData=[...tombstones.values()];
+    storageSet(QUESTION_DELETE_KEY,JSON.stringify(tombstoneData));
+    storageSet(QUESTION_BANKS_KEY,JSON.stringify(next));
+    queueCloudSave();
+  }catch(e){console.warn('Question banks could not be saved:',e)}
+}
 function bankSlug(s){return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
 function bankQuestionKey(subject,q,i){const raw=q?.sourceId??q?.id??i;return bankSlug(subject)+'__'+String(raw)+'__'+i}
 function bankNormalizeQuestions(data,subject){const arr=validateData(data);return arr.map((q,i)=>({...q,id:bankQuestionKey(subject,q,i),sourceId:q.id??i+1,subject,bankSubject:subject,importedAt:new Date().toISOString()}))}
@@ -5730,7 +5818,7 @@ const _prd=progressRenderDashboard;progressRenderDashboard=function(){_prd();con
 S(()=>rebind('progressRefreshBtn',()=>progressRenderDashboard()));
 
 /* ---------- Study Hub: clear bank, export / restore backup ---------- */
-S(()=>{const g=$('hubSubjectGrid');new MutationObserver(()=>{g.querySelectorAll('[data-hub-practice]:not([data-fx])').forEach(p=>{p.dataset.fx=1;const b=document.createElement('button');b.className='hub-practice-btn';b.style.marginLeft='5px';b.textContent='Clear';b.onclick=async()=>{const s=p.dataset.hubPractice;if(!(await uiDialog('Delete ALL questions in "'+s+'"?',{ok:'Delete'})))return;const d=bankLoad();delete d[s];bankSave(d);bankRenderHub()};p.after(b)})}).observe(g,{childList:true});
+S(()=>{const g=$('hubSubjectGrid');new MutationObserver(()=>{g.querySelectorAll('[data-hub-practice]:not([data-fx])').forEach(p=>{p.dataset.fx=1;const b=document.createElement('button');b.className='hub-practice-btn';b.style.marginLeft='5px';b.textContent='Clear';b.onclick=async()=>{const s=p.dataset.hubPractice;if(!(await uiDialog('Delete ALL questions in "'+s+'"?',{ok:'Delete'})))return;const d=bankLoad(),n=Array.isArray(d[s])?d[s].length:0;delete d[s];bankSave(d);bankRenderHub();bankRenderSummary();try{if(typeof toast==='function')toast('Deleted '+n+' question'+(n===1?'':'s')+' from '+s+'.')}catch(e){}};p.after(b)})}).observe(g,{childList:true});
 const box=$('studyHubRefreshBtn').parentNode,mk=(t,f)=>{const b=document.createElement('button');b.className='btn outline';b.type='button';b.textContent=t;b.onclick=f;box.prepend(b);return b};
 const fi=document.createElement('input');fi.type='file';fi.accept='.json';fi.hidden=true;document.body.appendChild(fi);
 fi.id='kaushalBackupFile';fi.onchange=()=>{const f=fi.files[0];fi.value='';if(f){if(typeof window.__kbRestore==='function')window.__kbRestore(f);else toast('⚠ Restore is not ready yet — please reload the page.')}};
@@ -5781,12 +5869,12 @@ const cleanAtt=a=>(Array.isArray(a)?a:[]).map(x=>({at:isNaN(Date.parse(x?.at))?n
 
 /* ---------- sync v3: upload gate, compare-and-swap, light polling, merge ---------- */
 writeLocalSnapshot=function(){};
-const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.questions=[];p.state={};p.startRemaining=0;p.attempts=cleanAtt(J(ATT,[]));p.deletedNotes=delNotes();return p};
-const sig=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(DELN,'')]));
+const _bcp=buildCloudPayload;buildCloudPayload=function(){const p=_bcp();p.questions=[];p.state={};p.startRemaining=0;p.attempts=cleanAtt(J(ATT,[]));p.deletedNotes=delNotes();p.deletedQuestions=questionDeleteEntries();return p};
+const sig=()=>hs(JSON.stringify([bankLoad(),questionDeleteEntries(),notesLoad(),getTrackerSnapshot(),planLoad(),revisionLoad(),storageGet(ATT,''),storageGet(DELN,'')]));
 /* FIX: the Plan sync uses its own row and never updates SYNC, so it must not make sig() look unsynced forever and force the
    merge-only union() path (deleted questions came back). The union/take decision now uses sigData() (main-row data only). */
 const SYNCD='cgpsc_sync_data_sig_v3',BASE='cgpsc_bank_base_ids_v1';
-const sigData=()=>hs(JSON.stringify([bankLoad(),notesLoad(),getTrackerSnapshot(),revisionLoad(),storageGet(ATT,''),storageGet(DELN,'')]));
+const sigData=()=>hs(JSON.stringify([bankLoad(),questionDeleteEntries(),notesLoad(),getTrackerSnapshot(),revisionLoad(),storageGet(ATT,''),storageGet(DELN,'')]));
 /* ids of every question at the last successful sync: lets union() tell "deleted elsewhere" from "new here" */
 function bankIdsNow(){const o={},b=bankLoad();Object.keys(b).forEach(k=>o[k]=(Array.isArray(b[k])?b[k]:[]).map(q=>q&&q.id));return o}
 function storeBase(o){storageSet(BASE,JSON.stringify(o))}
@@ -5824,11 +5912,12 @@ function dropDeleted(){
 }
 function union(remote){
  mergeDeleted(remote.deletedNotes);
- const rb=migBank(remote.questionBanks||{}),lb=bankLoad(),b={},base=remote.questionBanks?J(BASE,null):null;
+ mergeDeletedQuestions(remote.deletedQuestions);
+ const rb=filterDeletedQuestionBanks(migBank(remote.questionBanks||{})),lb=bankLoad(),b={},base=remote.questionBanks?J(BASE,null):null;
  new Set([...Object.keys(lb),...Object.keys(rb)]).forEach(s=>{const bs=base&&Array.isArray(base[s])?new Set(base[s]):null,lm=new Set((lb[s]||[]).map(x=>x&&x.id)),rm=new Set((rb[s]||[]).map(x=>x&&x.id));
   /* FIX: 3-way merge. A question seen at the last sync but now missing on one side was DELETED there, so it is not resurrected. */
   b[s]=mergeObj(lb[s],rb[s],'id',o=>o).filter(x=>{if(!bs||!x)return true;return(lm.has(x.id)&&rm.has(x.id))||!bs.has(x.id)})});
- storageSet(QUESTION_BANKS_KEY,JSON.stringify(b));
+ storageSet(QUESTION_BANKS_KEY,JSON.stringify(filterDeletedQuestionBanks(b)));
  const ln=notesLoad(),rn=notesNormalize(remote.notes),n={};new Set([...Object.keys(ln),...Object.keys(rn)]).forEach(s=>n[s]=mergeObj(ln[s],rn[s],'id',(a,c)=>{const cn=Date.parse(c.updatedAt||0)>Date.parse(a.updatedAt||0);return noteMarks(cn?c:a,cn?a:c)}));storageSet(NOTES_KEY,JSON.stringify(n));
  const t=getTrackerSnapshot(),rt=remote.tracker?.days||{};Object.entries(rt).forEach(([d,v])=>{if(!t.days[d]||Array.isArray(t.days[d]))t.days[d]=v;else if(v&&!Array.isArray(v))t.days[d]=mergeDay(v,t.days[d])});storageSet(TRACKER_KEY,JSON.stringify(t));
  storageSet(REVISION_KEY,JSON.stringify(revisionMerge(revisionLoad(),remote.revision||[])));
@@ -5836,7 +5925,7 @@ function union(remote){
  storageSet(ATT,JSON.stringify(cleanAtt(mergeObj(J(ATT,[]),remote.attempts,'at',o=>o).sort((a,c)=>Date.parse(c.at)-Date.parse(a.at)))));
  dropDeleted();
 }
-function takeRemote(r){mergeDeleted(r.deletedNotes);if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(migBank(r.questionBanks)));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(trackerMerge(getTrackerSnapshot(),r.tracker)));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));dropDeleted()}
+function takeRemote(r){mergeDeleted(r.deletedNotes);mergeDeletedQuestions(r.deletedQuestions);if(r.questionBanks)storageSet(QUESTION_BANKS_KEY,JSON.stringify(filterDeletedQuestionBanks(migBank(r.questionBanks))));if(r.notes){const rn=notesNormalize(r.notes),ln=notesLoad();Object.keys(rn).forEach(k=>{const lm=new Map((ln[k]||[]).map(x=>[x&&x.id,x]));rn[k]=rn[k].map(x=>{const l=x&&lm.get(x.id);return l?noteMarks(x,l):x})});storageSet(NOTES_KEY,JSON.stringify(rn))}if(r.tracker?.days)storageSet(TRACKER_KEY,JSON.stringify(trackerMerge(getTrackerSnapshot(),r.tracker)));if(Array.isArray(r.revision))storageSet(REVISION_KEY,JSON.stringify(r.revision));if(r.plan?.days)storageSet(PLAN_KEY,JSON.stringify(planMergeData(planLoad(),r.plan)));if(Array.isArray(r.attempts))storageSet(ATT,JSON.stringify(cleanAtt(r.attempts)));dropDeleted()}
 function refresh(){S(()=>{const ns=$('notesScreen'),ti=$('notesTitleInput'),hi=$('notesHtmlInput');if(ns&&!ns.classList.contains('hidden')&&$('ntfLibrary')&&typeof window.notesRefreshTopicPage==='function'){window.notesRefreshTopicPage()}else if(ns&&!ns.classList.contains('hidden')&&!(ti&&ti.value.trim())&&!(hi&&hi.value.trim())&&typeof window.notesV2Open==='function')window.notesV2Open()});S(()=>{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()});S(()=>{App.revision=revisionLoad();revisionRenderHome();revisionRenderScreen();trackerRender();bankRenderHub();notesRenderSubjects();if(!$('planScreen').classList.contains('hidden'))planRender();if(!$('progressScreen').classList.contains('hidden'))progressRenderDashboard()})}
 applySnapshot=function(){return false};   /* never load another device's exam state */
 async function pull(full){
@@ -6497,7 +6586,15 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
 
   function escV2(v){return String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]))}
   function safeJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))}catch(e){return fallback}}
-  function saveJSON(key,val){try{localStorage.setItem(key,JSON.stringify(val));if(typeof queueCloudSave==='function')queueCloudSave()}catch(e){}}
+  function saveJSON(key,val){
+    try{
+      const raw=JSON.stringify(val);
+      localStorage.setItem(key,raw);
+      if(localStorage.getItem(key)!==raw)throw new Error('Saved data could not be read back from browser storage.');
+      if(typeof queueCloudSave==='function')queueCloudSave();
+      return true;
+    }catch(e){console.warn('Study Hub storage save failed for '+key+':',e);return false}
+  }
   function subjectsByName(){const o={};SUBJECTS.forEach(s=>o[s.name]=s);return o}
   const SUBJECT_MAP=subjectsByName();
 
@@ -6516,7 +6613,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   function notesData(){const d=migrateNotes();SUBJECTS.forEach(s=>{if(!Array.isArray(d[s.name]))d[s.name]=[]});return d}
   function totalNotes(d){return SUBJECTS.reduce((n,s)=>n+(Array.isArray(d[s.name])?d[s.name].filter(x=>String(x?.html||'').trim()).length:0),0)}
-  function notePool(filter){const d=notesData(), pool=[];SUBJECTS.forEach(s=>{if(filter!=='__all__'&&s.name!==filter)return;(d[s.name]||[]).forEach(n=>{if(n&&String(n.html||'').trim())pool.push({...n,subject:s.name})})});return pool}
+  function notePool(filter){const d=notesData(), pool=[];SUBJECTS.forEach(s=>{if(filter!=='__all__'&&s.name!==filter)return;(d[s.name]||[]).forEach(n=>{const hasStudyContent=n&&(String(n.html||'').trim()||String(n.pdfUrl||'').trim()||String(n.sourceUrl||'').trim());if(hasStudyContent)pool.push({...n,subject:s.name})})});return pool}
 
   let selectedSubject='General Studies';
   let selectedTopic='';
@@ -6560,35 +6657,54 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     $n('notesSelectedTopic').textContent=selectedTopic.startsWith(subject+'|')?selectedTopic.slice(subject.length+1):'No topic selected';
     renderSubjects();
   }
-  function saveCurrent(){
+  let savingNotes=false;
+  async function saveCurrent(){
+    if(savingNotes)return;
     const html=$n('notesHtmlInput').value.trim();
     if(!html){$n('notesCurrentStatus').textContent='Add some HTML before saving.';return}
-    const d=notesData();
-    const title=$n('notesTitleInput').value.trim()||((selectedTopic.split('|')[1]||selectedSubject)+' Notes');
-    const topic=selectedTopic.startsWith(selectedSubject+'|')?selectedTopic.slice(selectedSubject.length+1):'';
-    const editingId=window._editingNoteId||window._currentOpenNoteId||'';
-    let updated=false;
-    if(editingId){
-      for(const subject of SUBJECTS){
-        const arr=Array.isArray(d[subject.name])?d[subject.name]:[];
-        const idx=arr.findIndex(n=>n&&n.id===editingId);
-        if(idx>=0){
-          arr[idx]={...arr[idx],id:editingId,title,html,topic,updatedAt:new Date().toISOString()};
-          d[subject.name]=arr;updated=true;selectedNoteId=editingId;break;
+    const btn=$n('notesSaveBtn');
+    savingNotes=true;if(btn){btn.disabled=true;btn.textContent='Saving…'}
+    try{
+      const d=notesData();
+      const title=$n('notesTitleInput').value.trim()||((selectedTopic.split('|')[1]||selectedSubject)+' Notes');
+      const topic=selectedTopic.startsWith(selectedSubject+'|')?selectedTopic.slice(selectedSubject.length+1):'';
+      const editingId=window._editingNoteId||window._currentOpenNoteId||'';
+      let updated=false;
+      if(editingId){
+        for(const subject of SUBJECTS){
+          const arr=Array.isArray(d[subject.name])?d[subject.name]:[];
+          const idx=arr.findIndex(n=>n&&n.id===editingId);
+          if(idx>=0){
+            arr[idx]={...arr[idx],id:editingId,title,html,topic,updatedAt:new Date().toISOString()};
+            d[subject.name]=arr;updated=true;selectedNoteId=editingId;break;
+          }
         }
       }
+      if(!updated){
+        const note={id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html,topic,updatedAt:new Date().toISOString()};
+        d[selectedSubject]=[note,...(d[selectedSubject]||[])];
+        selectedNoteId=note.id;
+      }
+      if(!saveJSON(V2_KEY,d))throw new Error('The browser did not accept the save. Your text has been kept in the editor.');
+      // Wait for IndexedDB to finish committing before telling the user it is saved.
+      if(typeof window.__kbPersistKey==='function')await window.__kbPersistKey(V2_KEY);
+      const check=JSON.parse(localStorage.getItem(V2_KEY)||'{}');
+      const checkArr=Array.isArray(check[selectedSubject])?check[selectedSubject]:[];
+      if(!checkArr.some(n=>n&&String(n.id)===String(selectedNoteId)))throw new Error('The saved note could not be verified after writing. Your text has been kept in the editor.');
+      window._editingNoteId='';
+      window._currentOpenNoteId=selectedNoteId;
+      $n('notesTitleInput').value='';$n('notesHtmlInput').value='';
+      $n('notesCurrentStatus').textContent=updated?`Updated “${title}” under ${selectedSubject}.`:`Saved “${title}” under ${selectedSubject}.`;
+      $n('notesLastSaved').textContent='Saved and stored on this device';
+      renderSubjects();renderLotteryPool();
+    }catch(err){
+      // Keep both title and note content in the editor so the user can retry or export a backup.
+      window._editingNoteId=selectedNoteId||window._editingNoteId||'';
+      $n('notesCurrentStatus').textContent='Save not confirmed: '+(err&&err.message?err.message:'browser storage error')+' Please keep this page open and retry.';
+      console.error('Notes save did not complete:',err);
+    }finally{
+      savingNotes=false;if(btn){btn.disabled=false;btn.textContent='Save Notes'}
     }
-    if(!updated){
-      const note={id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html,topic,updatedAt:new Date().toISOString()};
-      d[selectedSubject]=[note,...(d[selectedSubject]||[])];
-      selectedNoteId=note.id;
-    }
-    saveJSON(V2_KEY,d);
-    window._editingNoteId='';
-    window._currentOpenNoteId=selectedNoteId;
-    $n('notesTitleInput').value='';$n('notesHtmlInput').value='';
-    $n('notesCurrentStatus').textContent=updated?`Updated “${title}” under ${selectedSubject}.`:`Saved “${title}” under ${selectedSubject}.`;
-    renderSubjects();renderLotteryPool();
   }
   function editNoteV2(id){
     const d=notesData();let found=null;
@@ -6965,7 +7081,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     CATALOG.forEach(sub=>{
       if(filter&&filter!=='__all__'&&sub.name!==filter)return;
       (Array.isArray(d[sub.name])?d[sub.name]:[]).forEach(n=>{
-        if(!n||!String(n.html||'').trim()||!String(n.topic||'').includes(' › '))return;
+        // Notes created in the current editor may be PDF/source links with html:'',
+        // so include them in the draw when they contain either readable HTML or a saved URL.
+        const hasStudyContent=n&&(String(n.html||'').trim()||String(n.pdfUrl||'').trim()||String(n.sourceUrl||'').trim());
+        if(!hasStudyContent||!String(n.topic||'').includes(' › '))return;
         if(isCoolingDown(n)){resting++;return}
         pool.push({...n,subject:sub.name});
       });
@@ -7740,11 +7859,14 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   function removeQuestion(id,bank){
     if(!confirm('Remove this question from the topic quiz?'))return;
-    const banks=bankLoad();if(!Array.isArray(banks[bank]))return;
-    banks[bank]=banks[bank].filter(q=>String(q.id)!==String(id));bankSave(banks);
+    const banks=bankLoad();if(!Array.isArray(banks[bank])){setStatus('Could not find the selected question bank. Refresh and try again.','err');return}
+    const before=banks[bank].length;
+    banks[bank]=banks[bank].filter(q=>String(q&&q.id)!==String(id));
+    if(banks[bank].length===before){setStatus('Question was already removed. Refreshing the list.','err');paintPanel(false);return}
+    bankSave(banks);
     try{window.notesRefreshTopicCounts&&window.notesRefreshTopicCounts()}catch(e){}
     try{bankRenderSummary&&bankRenderSummary();bankRenderHub&&bankRenderHub()}catch(e){}
-    paintPanel(false);paintDash();
+    paintPanel(false);paintDash();setStatus('Question deleted from this topic and saved.','ok');
   }
   function panelHTML(){return `<header class="ntq-head"><div><span class="ntq-kicker">TOPIC QUIZ</span><h3>Test questions for this topic</h3><p id="ntqSub"></p></div><span class="ntq-count" id="ntqCount">0 questions</span></header>
     <details class="ntq-help" id="ntqHelp"><summary>How to add questions to this topic</summary>
@@ -7772,7 +7894,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
       $('ntqCopySample').onclick=e=>copy(sampleText(),e.currentTarget);
       $('ntqCopyPrompt').onclick=e=>{if(cur)copy(promptText(),e.currentTarget)};
       $('ntqAdd').onclick=addQuestions;
-      $('ntqList').addEventListener('click',ev=>{const b=ev.target.closest('[data-ntq-del]');if(b)removeQuestion(b.dataset.ntqDel,b.dataset.ntqBank)});
+      $('ntqList').addEventListener('click',ev=>{const b=ev.target.closest('[data-ntq-del]');if(b){ev.preventDefault();ev.stopPropagation();removeQuestion(b.dataset.ntqDel,b.dataset.ntqBank)}});
       if(cur)paintPanel(true);
     }
   }
@@ -8302,7 +8424,13 @@ setInterval(tick,120000);
  const getQueue=()=>parse(storageGet(QUEUE_KEY,'[]'),[]);
  const seenKey=k=>'cgpsc_incremental_seen_v1_'+k;
  function setQueue(q){storageSet(QUEUE_KEY,JSON.stringify([...new Set(q)]))}
- function markDirty(k){if(remoteApply||!active||!isSyncable(k))return;const q=getQueue();if(!q.includes(k))q.push(k);setQueue(q);schedule(700)}
+ function markDirty(k){
+   if(remoteApply||!isSyncable(k))return;
+   // Persist pending local edits even before the sync engine activates. On the next
+   // load, pull() skips queued keys and push() sends the local version first.
+   const q=getQueue();if(!q.includes(k)){q.push(k);setQueue(q)}
+   if(active)schedule(700);
+ }
  function schedule(ms=1200){clearTimeout(timer);timer=setTimeout(()=>{if(navigator.onLine){push().then(()=>pull(false)).catch(e=>console.warn('Incremental sync:',e))}},ms)}
  async function request(url,opts={}){const r=await fetch(url,{cache:'no-store',...opts});if(!r.ok){const e=new Error('Incremental sync HTTP '+r.status);e.status=r.status;throw e}return r.status===204?[]:r.json()}
  async function tableExists(){try{await request(endpoint()+'?select=record_key&limit=1',{headers:cloudHeaders()});return true}catch(e){return false}}
@@ -8412,7 +8540,12 @@ setInterval(tick,120000);
     NOTE_KEYS.forEach(k=>{try{localStorage.setItem(k,'{}')}catch(e){}});
     // Clear the auxiliary notes backup record too, so it cannot revive old notes on a later load.
     try{const req=indexedDB.open('cgpsc_notes_backup',1);req.onsuccess=()=>{const db=req.result;if(db.objectStoreNames.contains('kv')){const tx=db.transaction('kv','readwrite');tx.objectStore('kv').delete('cgpsc_subject_html_notes_v2');tx.oncomplete=()=>db.close();tx.onerror=()=>db.close()}else db.close()}}catch(e){}
-    try{localStorage.setItem(RESET_KEY,'1')}catch(e){}
+    try{
+      localStorage.setItem(RESET_KEY,'1');
+      if(typeof window.__kbPersistKey==='function'){
+        await Promise.all([RESET_KEY,DELETED_KEY,...NOTE_KEYS].map(k=>window.__kbPersistKey(k)));
+      }
+    }catch(e){console.warn('Could not confirm the one-time notes reset marker:',e)}
     try{if(typeof window.queueCloudSave==='function')window.queueCloudSave()}catch(e){}
     try{if(typeof window.notesRenderSubjects==='function')window.notesRenderSubjects()}catch(e){}
     try{if(typeof window.notesRender==='function')window.notesRender()}catch(e){}
