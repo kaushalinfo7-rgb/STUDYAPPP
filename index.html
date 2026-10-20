@@ -6855,12 +6855,12 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     if(savedSource){
       try{
         const source=new URL(savedSource,window.location.href);
-        if(source.protocol==='https:'||source.protocol==='http:'){
+        if(source.protocol==='https:'||source.protocol==='http:'||source.protocol==='file:'){
           window.open(source.href,'_blank','noopener,noreferrer');
           return;
         }
       }catch(e){}
-      say('This source link is invalid. Edit the note and enter a valid HTTP or HTTPS URL.');
+      say('This source link is invalid. Edit the note and enter a valid HTTP, HTTPS, or file:/// URL.');
       return;
     }
     window._currentOpenNoteId=found.id;
@@ -7132,8 +7132,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   function normalizeSourceUrl(value){
     try{
-      const url=new URL(String(value||'').trim());
-      return (url.protocol==='http:'||url.protocol==='https:')?url.href:'';
+      const raw=String(value||'').trim();
+      const url=new URL(raw);
+      // file:/// links can open files on this same computer when browser security permits it.
+      return (url.protocol==='http:'||url.protocol==='https:'||url.protocol==='file:')?url.href:'';
     }catch(e){return ''}
   }
   function filteredGroups(subject){
@@ -7242,7 +7244,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   function saveNote(){
     const pdfUrl=normalizeSourceUrl($('ntfPdfUrl').value);
-    if(!pdfUrl){$('ntfStatus').textContent='Enter a valid PDF/source URL beginning with https:// or http://.';return}
+    if(!pdfUrl){$('ntfStatus').textContent='Enter an http://, https://, or file:/// source link.';return}
     const title=$('ntfTitle').value.trim()||selected.topic+' Notes';
     const wasEditing=!!editingId;
     const d=load(),arr=Array.isArray(d[selected.subject])?d[selected.subject]:[];
@@ -7285,7 +7287,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   }
   function preview(){
     const url=normalizeSourceUrl($('ntfPdfUrl')?.value||'');
-    if(!url){$('ntfStatus').textContent='Enter a valid PDF/source URL before opening it.';return}
+    if(!url){$('ntfStatus').textContent='Enter a valid http://, https://, or file:/// source link before opening it.';return}
     $('ntfStatus').textContent='Opening source in a new tab…';
     window.open(url,'_blank','noopener,noreferrer');
   }
@@ -7320,7 +7322,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
               <div class="ntf-editor-state" id="ntfEditorState">Select New Note to create a note specifically for this topic.</div>
               <div class="ntf-title-row"><label>Note title<input id="ntfTitle" maxlength="160" placeholder="e.g. Quick Revision Notes" type="text"></label></div>
               <div class="ntf-html-label"><span>PDF / Source URL</span><span class="ntf-html-hint">Opens the saved source in a new tab</span></div>
-              <input class="ntf-pdf-url" id="ntfPdfUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://example.com/document.pdf" aria-label="PDF or source URL">
+              <input class="ntf-pdf-url" id="ntfPdfUrl" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com/document.pdf or file:///Users/you/Downloads/file.html" aria-label="PDF or source URL">
               <div class="ntf-editor-bottom"><span class="ntf-status" id="ntfStatus">No unsaved note</span><div class="ntf-save-actions"><button class="btn outline" id="ntfPreviewBtn" type="button">Open Source</button><button class="btn primary" id="ntfSaveBtn" type="button">Save Link</button></div></div>
             </main>
           </div>
@@ -8288,6 +8290,45 @@ setInterval(tick,120000);
  (window.__kbReady||Promise.resolve()).then(()=>activate());
  setInterval(()=>{if(active&&document.visibilityState==='visible'){push();pull(false)}else if(!active)activate()},120000);
  window.cgpscIncrementalSync={status:()=>({active,queued:getQueue().length,table:TABLE}),syncNow:async()=>{await activate();await push();await pull(false)}};
+})();
+
+/* ===== One-time notes reset requested for the PDF/local-source-link version ===== */
+(function(){
+  'use strict';
+  const RESET_KEY='cgpsc_notes_reset_for_local_links_20261020_v1';
+  const NOTE_KEYS=['cgpsc_subject_html_notes_v2','cgpsc_subject_html_notes_v1'];
+  const DELETED_KEY='cgpsc_deleted_note_ids_v1';
+  const parse=v=>{try{const o=JSON.parse(v||'{}');return o&&typeof o==='object'&&!Array.isArray(o)?o:{}}catch(e){return {}}};
+  const collectIds=(store,set)=>{Object.values(parse(typeof store==='string'?store:JSON.stringify(store||{}))).forEach(arr=>{if(Array.isArray(arr))arr.forEach(n=>{if(n&&n.id!==undefined&&n.id!==null)set.add(String(n.id))})})};
+  function readBackupDb(){return new Promise(resolve=>{try{
+    const req=indexedDB.open('cgpsc_notes_backup',1);
+    req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('kv'))req.result.createObjectStore('kv')};
+    req.onerror=()=>resolve(null);
+    req.onsuccess=()=>{const db=req.result;if(!db.objectStoreNames.contains('kv')){db.close();resolve(null);return}
+      const tx=db.transaction('kv','readonly'),q=tx.objectStore('kv').get('cgpsc_subject_html_notes_v2');
+      q.onsuccess=()=>{const v=q.result||null;db.close();resolve(v)};q.onerror=()=>{db.close();resolve(null)};
+    };
+  }catch(e){resolve(null)}})}
+  async function reset(){
+    try{if(localStorage.getItem(RESET_KEY)==='1')return}catch(e){}
+    const ids=new Set();
+    // The durable backup database can hold notes that are not mirrored in raw localStorage.
+    const backup=await readBackupDb();collectIds(backup,ids);
+    NOTE_KEYS.forEach(k=>{try{collectIds(localStorage.getItem(k),ids)}catch(e){}});
+    try{if(typeof window.notesLoad==='function')collectIds(window.notesLoad(),ids)}catch(e){}
+    // Existing notes are now deletions, not just an empty local list, so sync does not merge them back.
+    try{const old=JSON.parse(localStorage.getItem(DELETED_KEY)||'[]');if(Array.isArray(old))old.forEach(x=>ids.add(String(x)))}catch(e){}
+    try{localStorage.setItem(DELETED_KEY,JSON.stringify([...ids]))}catch(e){}
+    NOTE_KEYS.forEach(k=>{try{localStorage.setItem(k,'{}')}catch(e){}});
+    // Clear the auxiliary notes backup record too, so it cannot revive old notes on a later load.
+    try{const req=indexedDB.open('cgpsc_notes_backup',1);req.onsuccess=()=>{const db=req.result;if(db.objectStoreNames.contains('kv')){const tx=db.transaction('kv','readwrite');tx.objectStore('kv').delete('cgpsc_subject_html_notes_v2');tx.oncomplete=()=>db.close();tx.onerror=()=>db.close()}else db.close()}}catch(e){}
+    try{localStorage.setItem(RESET_KEY,'1')}catch(e){}
+    try{if(typeof window.queueCloudSave==='function')window.queueCloudSave()}catch(e){}
+    try{if(typeof window.notesRenderSubjects==='function')window.notesRenderSubjects()}catch(e){}
+    try{if(typeof window.notesRender==='function')window.notesRender()}catch(e){}
+  }
+  const run=()=>{const ready=window.__kbReady||Promise.resolve();Promise.resolve(ready).then(reset).catch(reset)};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
 })();
 </script>
 </body>
