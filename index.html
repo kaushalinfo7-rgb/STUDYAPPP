@@ -5428,6 +5428,8 @@ Generate strictly according to these instructions. Perform a final JSON syntax c
   .ntf-html-hint{font-weight:600;text-transform:none;letter-spacing:0}
   .ntf-html{display:block;width:100%;min-height:405px;resize:vertical;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:13px;background:#102225;color:#e8efed;font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;outline:none}
   .ntf-html:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(36,86,90,.08)}
+  .ntf-pdf-url{display:block;width:100%;height:54px;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:0 14px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;outline:none}
+  .ntf-pdf-url:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(36,86,90,.08)}
   .ntf-editor-bottom{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px}
   .ntf-status{font-size:10px;color:var(--muted);min-width:0}
   .ntf-save-actions{display:flex;gap:7px;flex-shrink:0}
@@ -6848,6 +6850,19 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     let found=null;
     try{found=findNoteById(id)}catch(e){console.error('[Kaushal] note lookup failed',e)}
     if(!found){console.warn('[Kaushal] Note not found:',id,BUILD);say('Could not find that note on this device. Try reloading the page (Ctrl+Shift+R).');return}
+    // PDF/source notes leave the app reader and open the saved source in a separate tab.
+    const savedSource=String(found.pdfUrl||found.sourceUrl||'').trim();
+    if(savedSource){
+      try{
+        const source=new URL(savedSource,window.location.href);
+        if(source.protocol==='https:'||source.protocol==='http:'){
+          window.open(source.href,'_blank','noopener,noreferrer');
+          return;
+        }
+      }catch(e){}
+      say('This source link is invalid. Edit the note and enter a valid HTTP or HTTPS URL.');
+      return;
+    }
     window._currentOpenNoteId=found.id;
     window._currentOpenNoteSubject=found.subject;
     window._editingNoteId='';
@@ -7113,7 +7128,13 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     return (Array.isArray(d[subject])?d[subject]:[]).filter(n=>String(n?.topic||'')===key);
   }
   function subjectTotal(d,subject){
-    return (Array.isArray(d[subject])?d[subject]:[]).filter(n=>String(n?.html||'').trim()).length;
+    return (Array.isArray(d[subject])?d[subject]:[]).filter(n=>String(n?.html||'').trim()||String(n?.pdfUrl||n?.sourceUrl||'').trim()).length;
+  }
+  function normalizeSourceUrl(value){
+    try{
+      const url=new URL(String(value||'').trim());
+      return (url.protocol==='http:'||url.protocol==='https:')?url.href:'';
+    }catch(e){return ''}
   }
   function filteredGroups(subject){
     const q=search.trim().toLowerCase();
@@ -7193,19 +7214,19 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     window.scrollTo(0,0);
   }
   function clearEditor(){
-    $('ntfTitle').value='';$('ntfHtml').value='';editingId='';
+    $('ntfTitle').value='';$('ntfPdfUrl').value='';editingId='';
     $('ntfStatus').textContent='No unsaved note';
-    $('ntfPreview').classList.add('hidden');
+    $('ntfPreview')?.classList.add('hidden');
     $('ntfSaveBtn').textContent='Save Note';
   }
   function newNote(){
     editingId='';
     $('ntfTitle').value=selected.topic+' Notes';
-    $('ntfHtml').value='';
-    $('ntfStatus').textContent='New note for '+selected.topic;
-    $('ntfEditorState').textContent='You are editing only: '+selected.topic;
+    $('ntfPdfUrl').value='';
+    $('ntfStatus').textContent='Add a PDF or source link for '+selected.topic+'.';
+    $('ntfEditorState').textContent='You are adding a source link only for: '+selected.topic;
     $('ntfSaveBtn').textContent='Save Note';
-    $('ntfHtml').focus();
+    $('ntfPdfUrl').focus();
   }
   function editSavedNote(id){
     const d=load(),arr=Array.isArray(d[selected.subject])?d[selected.subject]:[];
@@ -7213,15 +7234,15 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     if(!n)return;
     editingId=id;
     $('ntfTitle').value=n.title||'';
-    $('ntfHtml').value=n.html||'';
-    $('ntfStatus').textContent='Editing saved note. Saving updates this note.';
+    $('ntfPdfUrl').value=n.pdfUrl||n.sourceUrl||'';
+    $('ntfStatus').textContent=n.pdfUrl||n.sourceUrl?'Editing saved source link. Saving updates this note.':'Legacy HTML note: add a PDF/source URL to make it open in a new tab. Existing HTML data will be preserved.';
     $('ntfEditorState').textContent='Editing note from: '+selected.topic;
     $('ntfSaveBtn').textContent='Update Note';
-    $('ntfHtml').focus();
+    $('ntfPdfUrl').focus();
   }
   function saveNote(){
-    const html=$('ntfHtml').value.trim();
-    if(!html){$('ntfStatus').textContent='Add some HTML before saving.';return}
+    const pdfUrl=normalizeSourceUrl($('ntfPdfUrl').value);
+    if(!pdfUrl){$('ntfStatus').textContent='Enter a valid PDF/source URL beginning with https:// or http://.';return}
     const title=$('ntfTitle').value.trim()||selected.topic+' Notes';
     const wasEditing=!!editingId;
     const d=load(),arr=Array.isArray(d[selected.subject])?d[selected.subject]:[];
@@ -7229,16 +7250,17 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     if(editingId){
       const idx=arr.findIndex(n=>n&&n.id===editingId);
       if(idx>=0){
-        arr[idx]={...arr[idx],title,html,topic:key,updatedAt:new Date().toISOString()};
+        // Keep any old HTML note content intact for compatibility; the saved URL takes precedence when opening.
+        arr[idx]={...arr[idx],title,html:arr[idx].html||'',pdfUrl,topic:key,updatedAt:new Date().toISOString()};
       }else editingId='';
     }
     if(!editingId){
-      arr.unshift({id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html,topic:key,updatedAt:new Date().toISOString()});
+      arr.unshift({id:'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),title,html:'',pdfUrl,topic:key,updatedAt:new Date().toISOString()});
     }
     d[selected.subject]=arr;save(d);
-    $('ntfEditorState').textContent='Saved under: '+selected.topic;
+    $('ntfEditorState').textContent='Source link saved under: '+selected.topic;
     clearEditor();
-    $('ntfStatus').textContent=wasEditing?'Note updated successfully.':'Note saved successfully.';
+    $('ntfStatus').textContent=wasEditing?'Source link updated successfully.':'Source link saved successfully.';
     renderTopicNotes();renderLibrary();
   }
   function deleteSavedNote(id){
@@ -7262,10 +7284,10 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     }
   }
   function preview(){
-    const pane=$('ntfPreview'),body=$('ntfPreviewBody');if(!pane||!body)return;
-    if(typeof window.mountNoteFrame==='function')window.mountNoteFrame(body,$('ntfHtml').value||'');
-    else body.textContent=$('ntfHtml').value||'';
-    pane.classList.remove('hidden');
+    const url=normalizeSourceUrl($('ntfPdfUrl')?.value||'');
+    if(!url){$('ntfStatus').textContent='Enter a valid PDF/source URL before opening it.';return}
+    $('ntfStatus').textContent='Opening source in a new tab…';
+    window.open(url,'_blank','noopener,noreferrer');
   }
   function backToLibrary(){
     editingId='';$('ntfWorkspace').classList.remove('is-open');$('ntfLibraryWrap').style.display='';
@@ -7297,10 +7319,9 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
             <main class="ntf-editor">
               <div class="ntf-editor-state" id="ntfEditorState">Select New Note to create a note specifically for this topic.</div>
               <div class="ntf-title-row"><label>Note title<input id="ntfTitle" maxlength="160" placeholder="e.g. Quick Revision Notes" type="text"></label></div>
-              <div class="ntf-html-label"><span>HTML editor</span><span class="ntf-html-hint">This editor belongs only to the selected topic</span></div>
-              <textarea class="ntf-html" id="ntfHtml" spellcheck="false" placeholder="<h2>Topic heading</h2>&#10;<p>Write your notes here...</p>"></textarea>
-              <div class="ntf-editor-bottom"><span class="ntf-status" id="ntfStatus">No unsaved note</span><div class="ntf-save-actions"><button class="btn outline" id="ntfPreviewBtn" type="button">Preview</button><button class="btn primary" id="ntfSaveBtn" type="button">Save Note</button></div></div>
-              <div class="ntf-preview hidden" id="ntfPreview"><div class="ntf-preview-head"><span>PREVIEW</span><button class="btn outline" id="ntfPreviewClose" type="button">Close</button></div><div class="ntf-preview-body" id="ntfPreviewBody"></div></div>
+              <div class="ntf-html-label"><span>PDF / Source URL</span><span class="ntf-html-hint">Opens the saved source in a new tab</span></div>
+              <input class="ntf-pdf-url" id="ntfPdfUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://example.com/document.pdf" aria-label="PDF or source URL">
+              <div class="ntf-editor-bottom"><span class="ntf-status" id="ntfStatus">No unsaved note</span><div class="ntf-save-actions"><button class="btn outline" id="ntfPreviewBtn" type="button">Open Source</button><button class="btn primary" id="ntfSaveBtn" type="button">Save Link</button></div></div>
             </main>
           </div>
         </section>
@@ -7311,7 +7332,7 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     $('ntfNew').onclick=newNote;
     $('ntfSaveBtn').onclick=saveNote;
     $('ntfPreviewBtn').onclick=preview;
-    $('ntfPreviewClose').onclick=()=>$('ntfPreview').classList.add('hidden');
+    if($('ntfPreviewClose'))$('ntfPreviewClose').onclick=()=>$('ntfPreview')?.classList.add('hidden');
     renderLibrary();
     bindLottery();
     window.scrollTo(0,0);
