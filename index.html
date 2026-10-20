@@ -5564,7 +5564,8 @@ Generate strictly according to these instructions. Perform a final JSON syntax c
   body.theme-dark .ntf-group,body.theme-dark .ntf-searchbar input,body.theme-dark .ntf-workspace-head,
   body.theme-dark .ntf-topic-notes,body.theme-dark .ntf-editor-state,body.theme-dark .ntf-topic-count{background:var(--soft)}
   body.theme-dark .ntf-topic-btn:hover,body.theme-dark .ntf-topic-btn.is-selected{background:#294547}
-</style>
+
+.ntf-source-help{margin:8px 0 0;color:var(--muted,#526568);font-size:12px;line-height:1.55}.ntf-source-help code{padding:1px 4px;border-radius:4px;background:var(--soft,#F5F8F7);overflow-wrap:anywhere}</style>
 
 
 <style id="notes-v2-css">
@@ -6962,6 +6963,29 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   window.KAUSHAL_NOTES_BUILD=BUILD;
   function say(msg){try{if(typeof window.toast==='function')window.toast(msg);else console.warn(msg)}catch(e){console.warn(msg)}}
 
+  // Shared opener for web sources and local file:/// links. URL() also encodes
+  // ordinary spaces in pasted local paths, e.g. Documents/HTML notes/file.html.
+  window.kaushalNormalizeSourceLink=function(value){
+    try{
+      let raw=String(value||'').trim();
+      if((raw.startsWith('\"')&&raw.endsWith('\"'))||(raw.startsWith("'")&&raw.endsWith("'")))raw=raw.slice(1,-1).trim();
+      if(!/^https?:\/\//i.test(raw)&&!/^file:\/\//i.test(raw))return '';
+      const url=new URL(raw);
+      return (url.protocol==='http:'||url.protocol==='https:'||url.protocol==='file:')?url.href:'';
+    }catch(e){return ''}
+  };
+  window.kaushalOpenSourceLink=function(value){
+    const href=window.kaushalNormalizeSourceLink(value);
+    if(!href)return false;
+    // Activate a real link synchronously inside the user's click handler so
+    // popup blockers treat source opening as a direct user action.
+    const a=document.createElement('a');
+    a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.style.display='none';
+    document.body.appendChild(a);
+    try{a.click()}finally{a.remove()}
+    return true;
+  };
+
   window.notesOpenReader=function(id){
     let found=null;
     try{found=findNoteById(id)}catch(e){console.error('[Kaushal] note lookup failed',e)}
@@ -6969,13 +6993,12 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     // PDF/source notes leave the app reader and open the saved source in a separate tab.
     const savedSource=String(found.pdfUrl||found.sourceUrl||'').trim();
     if(savedSource){
-      try{
-        const source=new URL(savedSource,window.location.href);
-        if(source.protocol==='https:'||source.protocol==='http:'||source.protocol==='file:'){
-          window.open(source.href,'_blank','noopener,noreferrer');
-          return;
+      if(window.kaushalOpenSourceLink(savedSource)){
+        if(/^file:\/\//i.test(savedSource)&&window.location.protocol!=='file:'){
+          say('Local file link opening was attempted. Browsers may block file:/// links when this app is hosted online; open the app from a local HTML file to use local files.');
         }
-      }catch(e){}
+        return;
+      }
       say('This source link is invalid. Edit the note and enter a valid HTTP, HTTPS, or file:/// URL.');
       return;
     }
@@ -7309,12 +7332,9 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     return (Array.isArray(d[subject])?d[subject]:[]).filter(n=>String(n?.html||'').trim()||String(n?.pdfUrl||n?.sourceUrl||'').trim()).length;
   }
   function normalizeSourceUrl(value){
-    try{
-      const raw=String(value||'').trim();
-      const url=new URL(raw);
-      // file:/// links can open files on this same computer when browser security permits it.
-      return (url.protocol==='http:'||url.protocol==='https:'||url.protocol==='file:')?url.href:'';
-    }catch(e){return ''}
+    // Use the same URL cleanup/validation as the saved-note opener.
+    return typeof window.kaushalNormalizeSourceLink==='function'
+      ?window.kaushalNormalizeSourceLink(value):'';
   }
   function filteredGroups(subject){
     const q=search.trim().toLowerCase();
@@ -7491,8 +7511,11 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   function preview(){
     const url=normalizeSourceUrl($('ntfPdfUrl')?.value||'');
     if(!url){$('ntfStatus').textContent='Enter a valid http://, https://, or file:/// source link before opening it.';return}
-    $('ntfStatus').textContent='Opening source in a new tab…';
-    window.open(url,'_blank','noopener,noreferrer');
+    const opened=typeof window.kaushalOpenSourceLink==='function'&&window.kaushalOpenSourceLink(url);
+    if(!opened){$('ntfStatus').textContent='The source link could not be opened. Check the URL and try again.';return}
+    $('ntfStatus').textContent=/^file:\/\//i.test(url)&&window.location.protocol!=='file:'
+      ?'Opening attempted. A hosted page may be blocked from opening local files; open this app from a local HTML file to use file:/// links.'
+      :'Opening source in a new tab…';
   }
   function backToLibrary(){
     editingId='';$('ntfWorkspace').classList.remove('is-open');$('ntfLibraryWrap').style.display='';
@@ -7525,7 +7548,8 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
               <div class="ntf-editor-state" id="ntfEditorState">Select New Note to create a note specifically for this topic.</div>
               <div class="ntf-title-row"><label>Note title<input id="ntfTitle" maxlength="160" placeholder="e.g. Quick Revision Notes" type="text"></label></div>
               <div class="ntf-html-label"><span>PDF / Source URL</span><span class="ntf-html-hint">Opens the saved source in a new tab</span></div>
-              <input class="ntf-pdf-url" id="ntfPdfUrl" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com/document.pdf or file:///Users/you/Downloads/file.html" aria-label="PDF or source URL">
+              <input class="ntf-pdf-url" id="ntfPdfUrl" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com/document.pdf or file:///Users/kaushalyadav/Documents/HTML%20notes%20%20/file.html" aria-label="PDF or source URL">
+              <p class="ntf-source-help">Paste a full <code>file:///</code> link to an HTML note on this Mac. Spaces in file paths are supported. Local file links usually work when this app is opened from a local HTML file; browsers may block them when this app is hosted on a website.</p>
               <div class="ntf-editor-bottom"><span class="ntf-status" id="ntfStatus">No unsaved note</span><div class="ntf-save-actions"><button class="btn outline" id="ntfPreviewBtn" type="button">Open Source</button><button class="btn primary" id="ntfSaveBtn" type="button">Save Link</button></div></div>
             </main>
           </div>
