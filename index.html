@@ -3272,6 +3272,474 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 </style>
 
 <style id="cgpsc-bugfix-styles">.qbtn.not-answered{border-style:dashed!important;opacity:.88}.qbtn.not-answered.current{opacity:1}</style>
+
+<style id="kaushal-syllabus-progress-styles">
+.ntf-topic-progress-row{display:flex;align-items:stretch;gap:7px;min-width:0}.ntf-topic-progress-row>.ntf-topic-btn{flex:1;min-width:0}.ntf-topic-done{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:43px;padding:5px 4px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--muted);font-size:9px;font-weight:800;cursor:pointer}.ntf-topic-done input{width:17px;height:17px;margin:0;accent-color:var(--success);cursor:pointer}.ntf-topic-progress-row.is-complete .ntf-topic-done{border-color:var(--success);background:rgba(79,118,93,.09);color:var(--success)}
+#start .countdown-progress-track{position:relative}#start .countdown-progress-head{align-items:center}#start .countdown-bottom{gap:5px}#start .countdown-bottom #examCountdownStatus{font-variant-numeric:tabular-nums}
+</style>
+<style id="kaushal-180-day-countdown-styles">
+/* 180-day CGPSC mission countdown — isolated home-page addition */
+#start .exam-countdown-card{
+  --cd-gold:#f4cc78;--cd-mint:#9ee2cf;--cd-white:#f6fbf8;
+  position:relative;isolation:isolate;overflow:hidden;margin:20px -2px 16px;padding:16px 15px 13px;
+  border:1px solid rgba(220,245,235,.24);border-radius:20px;text-align:left;color:var(--cd-white);
+  background:radial-gradient(circle at 18% 18%,rgba(95,205,178,.18),transparent 34%),
+             radial-gradient(circle at 96% 88%,rgba(244,204,120,.16),transparent 35%),
+             linear-gradient(145deg,#12545a 0%,#0b444a 48%,#082f36 100%);
+  box-shadow:0 15px 34px rgba(0,20,23,.24),inset 0 1px 0 rgba(255,255,255,.12);
+}
+#start .exam-countdown-card:before{content:"";position:absolute;inset:-50% -80%;z-index:-1;pointer-events:none;background:linear-gradient(105deg,transparent 43%,rgba(255,255,255,.075) 50%,transparent 57%);transform:translateX(-35%) rotate(8deg);animation:countdownSweep 10s ease-in-out infinite}
+#start .exam-countdown-card:after{content:"";position:absolute;z-index:-1;right:-48px;top:42px;width:150px;height:150px;border:1px solid rgba(255,255,255,.07);border-radius:50%;box-shadow:0 0 0 15px rgba(255,255,255,.018),0 0 0 31px rgba(255,255,255,.014);animation:countdownHalo 7s ease-in-out infinite alternate}
+#start .countdown-topline,#start .countdown-progress-head,#start .countdown-bottom{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#start .countdown-topline{position:relative;z-index:1}
+#start .countdown-live{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:30px;background:rgba(4,29,33,.28);border:1px solid rgba(255,255,255,.15);font-size:9px;font-weight:950;letter-spacing:.12em;color:#d9f4e9}
+#start .countdown-live i{width:7px;height:7px;border-radius:50%;background:#8ff0c2;box-shadow:0 0 0 4px rgba(143,240,194,.12),0 0 12px #8ff0c2;animation:countdownPulse 1.8s ease-in-out infinite}
+#start .countdown-season{font-size:9px;letter-spacing:.13em;font-weight:850;color:rgba(235,248,243,.62)}
+#start .countdown-heading{margin:12px 0 0;color:var(--cd-gold);font-size:11px;font-weight:950;letter-spacing:.16em}
+#start .countdown-main{display:grid;grid-template-columns:140px minmax(0,1fr);align-items:center;gap:13px;margin:7px 0 13px;position:relative;z-index:1}
+#start .countdown-clock{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 13px;position:relative;z-index:1}
+#start .countdown-clock-unit{min-width:0;padding:9px 8px 8px;border:1px solid rgba(255,255,255,.15);border-radius:11px;text-align:center;background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.045));box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+#start .countdown-clock-unit strong{display:block;color:#fff;font-size:clamp(22px,3vw,30px);line-height:1.05;font-weight:950;letter-spacing:.025em;font-variant-numeric:tabular-nums;text-shadow:0 2px 12px rgba(0,0,0,.16)}
+#start .countdown-clock-unit span{display:block;margin-top:5px;color:#b9ded3;font-size:8px;font-weight:950;letter-spacing:.16em}
+#start .countdown-ring-wrap{position:relative;width:140px;height:140px;display:grid;place-items:center;isolation:isolate}
+#start .countdown-ring-wrap:before{content:"";position:absolute;inset:13px;border-radius:50%;background:radial-gradient(circle,rgba(158,226,207,.12),rgba(158,226,207,.025) 65%,transparent 70%);animation:countdownBreathe 3.2s ease-in-out infinite}
+#start .countdown-ring-svg{width:100%;height:100%;overflow:visible;transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(158,226,207,.16))}
+#start .countdown-ring-track,#start .countdown-ring-progress{fill:none;stroke-width:7}
+#start .countdown-ring-track{stroke:rgba(230,249,241,.15)}
+#start .countdown-ring-progress{stroke:#9ee2cf;stroke-linecap:round;stroke-dasharray:364.425;stroke-dashoffset:0;transition:stroke-dashoffset 1s linear}
+#start .countdown-center{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}
+#start .countdown-center strong{font-size:43px;line-height:1;font-weight:950;letter-spacing:-.065em;color:#fff;text-shadow:0 3px 20px rgba(0,0,0,.18);font-variant-numeric:tabular-nums}
+#start .countdown-center span{margin-top:6px;color:#bfe9dc;font-size:9px;font-weight:950;letter-spacing:.16em}
+#start .countdown-orbit-dot{position:absolute;top:9px;left:68px;width:8px;height:8px;border-radius:50%;background:var(--cd-gold);box-shadow:0 0 13px rgba(244,204,120,.9);transform-origin:2px 61px;animation:countdownOrbit 8s linear infinite;z-index:2}
+#start .countdown-details{min-width:0;padding:2px 0}
+#start .countdown-eyebrow{display:block;font-size:8px;font-weight:900;letter-spacing:.15em;color:#a9d7cb;margin-bottom:5px}
+#start .countdown-day-number{display:block;color:#fff;font-size:20px;line-height:1.2;font-weight:950;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+#start .countdown-day-number small{font-size:11px;color:rgba(238,249,244,.6);font-weight:800;letter-spacing:.05em}
+#start .countdown-details p{margin:7px 0 11px;color:rgba(236,247,242,.78);font-size:10px;line-height:1.5}
+#start .countdown-date-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#start .countdown-date-grid>div{min-width:0;padding:7px 8px;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:rgba(255,255,255,.055)}
+#start .countdown-date-grid small{display:block;color:#a8c8c2;font-size:7px;font-weight:900;letter-spacing:.1em;margin-bottom:3px}
+#start .countdown-date-grid b{display:block;color:#fff;font-size:9px;line-height:1.2;white-space:nowrap;font-weight:900;letter-spacing:.025em}
+#start .countdown-progress-head{margin:2px 1px 7px;font-size:8px;font-weight:900;letter-spacing:.105em;color:rgba(228,244,237,.69)}
+#start .countdown-progress-head b{font-size:9px;color:var(--cd-gold);font-variant-numeric:tabular-nums}
+#start .countdown-progress-track{height:7px;overflow:hidden;border-radius:20px;background:rgba(2,25,29,.4);border:1px solid rgba(255,255,255,.08)}
+#start .countdown-progress-track>span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#69cbb5,#b6edcf 72%,#f4cc78);box-shadow:0 0 12px rgba(158,226,207,.42);transition:width 1s linear;position:relative;overflow:hidden}
+#start .countdown-progress-track>span:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-100%);animation:countdownShimmer 2.8s ease-in-out infinite}
+#start .countdown-bottom{margin-top:8px;font-size:8px;font-weight:750;color:rgba(225,241,234,.68);letter-spacing:.035em}
+#start .countdown-bottom>span:last-child{color:#dceee6;letter-spacing:.12em;font-size:7px;font-weight:950}
+#start .countdown-bottom b{color:var(--cd-gold);font-size:11px;margin-left:3px}
+#start .countdown-decoration{position:absolute;pointer-events:none;color:rgba(244,204,120,.65);animation:countdownTwinkle 3.6s ease-in-out infinite}
+#start .countdown-decoration-one{right:17px;top:65px;font-size:14px}
+#start .countdown-decoration-two{right:34px;bottom:57px;font-size:12px;animation-delay:-1.7s}
+@keyframes countdownPulse{0%,100%{opacity:.75;transform:scale(.88)}50%{opacity:1;transform:scale(1.12)}}
+@keyframes countdownBreathe{0%,100%{transform:scale(.92);opacity:.6}50%{transform:scale(1.08);opacity:1}}
+@keyframes countdownOrbit{to{transform:rotate(360deg)}}
+@keyframes countdownHalo{from{transform:translate3d(0,0,0) scale(.94);opacity:.5}to{transform:translate3d(-12px,8px,0) scale(1.07);opacity:1}}
+@keyframes countdownSweep{0%,55%{transform:translateX(-45%) rotate(8deg)}80%,100%{transform:translateX(45%) rotate(8deg)}}
+@keyframes countdownShimmer{0%,35%{transform:translateX(-110%)}75%,100%{transform:translateX(110%)}}
+@keyframes countdownTwinkle{0%,100%{opacity:.35;transform:scale(.85) rotate(0)}50%{opacity:1;transform:scale(1.16) rotate(12deg)}}
+@media(max-width:600px){
+  #start .exam-countdown-card{margin:17px 0 14px;padding:14px 12px 12px;border-radius:17px}
+  #start .countdown-main{grid-template-columns:116px minmax(0,1fr);gap:10px;margin-top:9px}
+  #start .countdown-clock{gap:6px;margin-bottom:11px}
+  #start .countdown-clock-unit{padding:8px 5px 7px}
+  #start .countdown-clock-unit strong{font-size:24px}
+  #start .countdown-clock-unit span{font-size:7px;letter-spacing:.12em}
+  #start .countdown-ring-wrap{width:116px;height:116px}
+  #start .countdown-center strong{font-size:36px}
+  #start .countdown-day-number{font-size:18px}
+  #start .countdown-details p{font-size:9px;margin:6px 0 8px}
+  #start .countdown-date-grid{gap:4px}
+  #start .countdown-date-grid>div{padding:6px 5px}
+  #start .countdown-date-grid b{font-size:8px}
+}
+@media(max-width:380px){
+  #start .countdown-main{grid-template-columns:100px minmax(0,1fr);gap:8px}
+  #start .countdown-ring-wrap{width:100px;height:100px}
+  #start .countdown-center strong{font-size:32px}
+  #start .countdown-date-grid{grid-template-columns:1fr}
+  #start .countdown-date-grid>div{display:flex;justify-content:space-between;align-items:center;gap:5px}
+  #start .countdown-date-grid small{margin:0}
+}
+@media(prefers-reduced-motion:reduce){
+  #start .exam-countdown-card:before,#start .exam-countdown-card:after,#start .countdown-live i,
+  #start .countdown-ring-wrap:before,#start .countdown-orbit-dot,#start .countdown-progress-track>span:after,
+  #start .countdown-decoration{animation:none!important}
+  #start .countdown-ring-progress,#start .countdown-progress-track>span{transition:none!important}
+}
+</style>
+
+<style>
+/* ============================================================
+   KAUSHAL — CLEAN HOME DASHBOARD
+   Presentation-only home-page layer. All original IDs, controls,
+   countdown logic, navigation handlers and study data are retained.
+   ============================================================ */
+:root{
+  --home-canvas:#f2f5f3;
+  --home-surface:#ffffff;
+  --home-ink:#17383b;
+  --home-muted:#627678;
+  --home-line:#dce6e2;
+  --home-teal:#236b68;
+  --home-deep:#123e43;
+  --home-gold:#e7c477;
+}
+#start.screen:not(.hidden){
+  display:block!important;
+  min-height:100vh!important;
+  padding:clamp(12px,2.2vw,30px)!important;
+  box-sizing:border-box!important;
+  overflow:auto!important;
+  background:
+    radial-gradient(ellipse at 7% 0%,rgba(115,181,163,.13),transparent 34%),
+    radial-gradient(ellipse at 96% 12%,rgba(231,196,119,.12),transparent 27%),
+    var(--home-canvas)!important;
+}
+#start .start{
+  width:min(1480px,100%)!important;
+  max-width:1480px!important;
+  min-height:0!important;
+  margin:0 auto!important;
+  padding:0!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-template-rows:auto auto auto auto!important;
+  gap:17px!important;
+  overflow:visible!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+
+/* 1. Welcome + countdown hero */
+#start .brand{
+  grid-column:1!important;grid-row:1!important;
+  display:grid!important;
+  grid-template-columns:minmax(220px,.72fr) minmax(0,1.28fr)!important;
+  grid-template-rows:auto auto auto minmax(0,1fr) auto!important;
+  align-items:center!important;
+  column-gap:clamp(20px,3vw,42px)!important;
+  row-gap:0!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:clamp(22px,2.7vw,36px)!important;
+  border:0!important;
+  border-radius:23px!important;
+  border-bottom:0!important;
+  background:linear-gradient(135deg,#103b40 0%,#15565a 56%,#1b6865 100%)!important;
+  color:#f6fbf8!important;
+  text-align:left!important;
+  box-shadow:0 16px 40px rgba(18,62,67,.14),inset 0 1px 0 rgba(255,255,255,.1)!important;
+  position:relative!important;
+  isolation:isolate!important;
+}
+#start .brand:before{
+  display:none!important;
+  display:none!important;
+  top:clamp(22px,2.7vw,36px)!important;
+  left:clamp(22px,2.7vw,36px)!important;
+  width:42px!important;height:42px!important;
+  border-radius:13px!important;
+  font-size:23px!important;
+}
+#start .brand .badge{
+  grid-column:1!important;grid-row:1!important;
+  align-self:center!important;
+  width:max-content!important;
+  margin:0 0 12px 0!important;
+  padding:0!important;
+  background:none!important;
+  border:0!important;
+  color:#f1d28f!important;
+  font-size:10px!important;
+  letter-spacing:.15em!important;
+  line-height:1.4!important;
+}
+#start .brand h1{
+  grid-column:1!important;grid-row:2!important;
+  margin:0 0 8px!important;
+  color:#fff!important;
+  font-size:clamp(29px,3vw,43px)!important;
+  line-height:1.06!important;
+  letter-spacing:-.045em!important;
+}
+#start .brand>.sub{
+  grid-column:1!important;grid-row:3!important;
+  max-width:34ch!important;
+  margin:0!important;
+  color:#d5e7e3!important;
+  font-size:13px!important;
+  line-height:1.65!important;
+}
+#start .exam-countdown-card{
+  grid-column:2!important;grid-row:1 / 6!important;
+  align-self:stretch!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:300px!important;
+  margin:0!important;
+  padding:19px 21px 16px!important;
+  border-radius:18px!important;
+  box-shadow:0 13px 30px rgba(0,20,23,.20),inset 0 1px 0 rgba(255,255,255,.13)!important;
+}
+#start .countdown-main{grid-template-columns:132px minmax(0,1fr)!important;gap:17px!important;margin:7px 0 12px!important}
+#start .countdown-ring-wrap{width:132px!important;height:132px!important}
+#start .countdown-center strong{font-size:39px!important}
+#start .countdown-clock{gap:9px!important;margin:0 0 12px!important}
+#start .countdown-clock-unit{padding:8px 8px 7px!important}
+#start .countdown-clock-unit strong{font-size:clamp(22px,2.3vw,29px)!important}
+#start .countdown-details p{font-size:10px!important}
+#start .countdown-bottom{font-size:8px!important}
+#start .revision-home-card{
+  grid-column:1!important;grid-row:4!important;
+  align-self:stretch!important;
+  width:100%!important;
+  box-sizing:border-box!important;
+  margin:18px 0 0!important;
+  padding:14px 16px!important;
+  border:1px solid rgba(255,255,255,.19)!important;
+  border-radius:15px!important;
+  background:rgba(255,255,255,.075)!important;
+  box-shadow:none!important;
+  backdrop-filter:blur(8px);
+}
+#start .revision-home-title{color:#f4d995!important;font-size:10px!important;letter-spacing:.12em!important}
+#start .revision-count{display:inline-grid!important;place-items:center!important;min-width:28px!important;height:28px!important;padding:0 8px!important;border-radius:9px!important;background:#f1d28f!important;color:#173e42!important;font-size:16px!important}
+#start .revision-home-sub{margin:7px 0 10px!important;color:#d4e5e1!important;font-size:11px!important;line-height:1.45!important}
+#start .revision-focus-list{gap:4px!important;margin-bottom:9px!important;padding-left:14px!important}
+#start .revision-focus-list li{padding:5px 7px!important;border-radius:7px!important;background:rgba(255,255,255,.07)!important;color:#e5efec!important;font-size:10px!important}
+#start .revision-open-btn{min-height:35px!important;border:0!important;border-radius:9px!important;background:#f1d28f!important;color:#173e42!important;font-size:10px!important;font-weight:900!important;box-shadow:none!important}
+#start #homeThemeBtn{
+  grid-column:1!important;grid-row:5!important;justify-self:start!important;align-self:end!important;
+  width:auto!important;min-width:0!important;min-height:30px!important;height:30px!important;
+  margin:8px 0 0!important;padding:5px 11px!important;
+  border:1px solid rgba(255,255,255,.25)!important;border-radius:999px!important;
+  background:rgba(255,255,255,.08)!important;color:#e4f0ec!important;
+  box-shadow:none!important;font-size:9px!important;font-weight:800!important;
+}
+#start #homeThemeBtn:hover{background:rgba(255,255,255,.16)!important;transform:none!important}
+#start #homeThemeBtn{
+  grid-column:1!important;grid-row:5!important;justify-self:start!important;align-self:end!important;
+  width:auto!important;min-width:0!important;min-height:30px!important;height:30px!important;
+  margin:8px 0 0!important;padding:5px 11px!important;
+  border:1px solid rgba(255,255,255,.25)!important;border-radius:999px!important;
+  background:rgba(255,255,255,.08)!important;color:#e4f0ec!important;
+  box-shadow:none!important;font-size:9px!important;font-weight:800!important;
+}
+#start #homeThemeBtn:hover{background:rgba(255,255,255,.16)!important;transform:none!important}
+
+/* 2. Main tools — all six destinations stay visible and easy to scan */
+#start .study-tracker{
+  grid-column:1!important;grid-row:2!important;
+  position:relative!important;inset:auto!important;
+  width:100%!important;margin:0!important;padding:2px 0 0!important;
+  background:transparent!important;color:var(--home-ink)!important;
+  box-sizing:border-box!important;
+}
+#start .study-tracker:before{
+  content:"STUDY TOOLS";
+  display:block;margin:0 0 10px 2px;
+  color:#637a78;font-size:10px;font-weight:950;letter-spacing:.16em;
+}
+#start .study-nav-actions.study-nav-actions{
+  display:grid!important;
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  gap:10px!important;
+  width:100%!important;margin:0!important;
+  align-items:stretch!important;
+}
+#start .study-nav-actions.study-nav-actions>button.nav-tile.nav-tile{
+  min-width:0!important;min-height:112px!important;height:auto!important;
+  padding:14px!important;gap:10px!important;
+  border:1px solid var(--home-line)!important;
+  border-radius:15px!important;
+  background:var(--home-surface)!important;
+  color:var(--home-ink)!important;
+  box-shadow:0 5px 17px rgba(18,62,67,.045)!important;
+}
+#start .study-nav-actions>button.nav-tile .nav-ico{width:38px!important;height:38px!important;border-radius:11px!important}
+#start .study-nav-actions>button.nav-tile .nav-ico svg{width:20px!important;height:20px!important}
+#start .study-nav-actions>button.nav-tile .nav-label{font-size:13px!important;line-height:1.25!important}
+#start .study-nav-actions>button.nav-tile .nav-sub{font-size:10px!important;line-height:1.35!important;color:#687b7d!important}
+#start .study-nav-actions.study-nav-actions>button.nav-tile .nav-badge.nav-badge{top:11px!important;right:11px!important;min-width:22px!important;height:22px!important;font-size:10px!important}
+#start .study-tracker .tracker-panel{
+  top:62px!important;right:0!important;left:auto!important;bottom:auto!important;
+  width:min(390px,100%)!important;z-index:120!important;
+  border-radius:16px!important;box-shadow:0 18px 45px rgba(13,43,45,.18)!important;
+}
+
+/* 3. Small daily snapshot and a separate, quiet question-bank entry */
+#start .bank-import-card{
+  grid-column:1!important;grid-row:3!important;
+  display:grid!important;grid-template-columns:minmax(0,1fr)!important;
+  gap:12px!important;align-self:start!important;
+  min-width:0!important;width:100%!important;
+  min-height:0!important;height:auto!important;align-content:start!important;align-items:stretch!important;
+  grid-auto-rows:max-content!important;
+  margin:0!important;padding:0!important;
+  border:0!important;border-radius:0!important;
+  background:transparent!important;box-shadow:none!important;
+}
+#start .command-center{
+  height:auto!important;min-height:0!important;align-self:start!important;
+  height:auto!important;min-height:0!important;align-self:start!important;
+  margin:0!important;padding:17px 20px 13px!important;
+  border:1px solid rgba(255,255,255,.09)!important;
+  border-radius:17px!important;
+  background:linear-gradient(120deg,#123e43,#1a625f)!important;
+  box-shadow:0 8px 24px rgba(18,62,67,.09)!important;
+}
+#start .cc-top{align-items:center!important}
+#start .cc-top h2{font-size:21px!important;margin:3px 0!important}
+#start .cc-top p{font-size:11px!important}
+#start .cc-kicker{font-size:8px!important;letter-spacing:.15em!important}
+#start .cc-date{padding:6px 9px!important;font-size:8px!important}
+#start .cc-metrics{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:9px!important;margin:13px 0 0!important}
+#start .cc-metrics article{
+  display:grid!important;grid-template-columns:34px minmax(0,1fr) auto!important;
+  grid-template-rows:auto auto!important;align-items:center!important;
+  gap:1px 9px!important;padding:9px 11px!important;
+  border-radius:11px!important;background:rgba(255,255,255,.085)!important;
+}
+#start .cc-icon{grid-column:1!important;grid-row:1 / 3!important;width:32px!important;height:32px!important;margin:0!important;font-size:16px!important}
+#start .cc-metrics small{grid-column:2!important;grid-row:1!important;font-size:9px!important}
+#start .cc-metrics strong{grid-column:3!important;grid-row:1 / 3!important;font-size:21px!important;margin:0!important;white-space:nowrap}
+#start .cc-metrics em{grid-column:2!important;grid-row:2!important;font-size:8px!important}
+#start .cc-footer{margin-top:10px!important;padding-top:9px!important;font-size:8px!important}
+#start .bank-import-head{
+  display:flex!important;align-items:center!important;align-self:start!important;height:auto!important;min-height:0!important;gap:13px!important;
+  margin:0!important;padding:15px 17px!important;
+  border:1px solid var(--home-line)!important;border-radius:15px!important;
+  background:#fff!important;box-shadow:0 4px 15px rgba(18,62,67,.035)!important;
+}
+#start .bank-import-head:before{
+  flex:0 0 42px!important;width:42px!important;height:42px!important;
+  border-radius:12px!important;font-size:19px!important;
+}
+#start .bank-import-head h2{margin:0 0 3px!important;font-size:16px!important;line-height:1.25!important;color:var(--home-ink)!important}
+#start .bank-import-head p{display:block!important;margin:0!important;color:var(--home-muted)!important;font-size:10px!important;line-height:1.45!important}
+#start .bank-kicker{display:none!important}
+#start .bank-cloud-pill{margin-left:auto!important;padding:5px 8px!important;font-size:9px!important}
+#start .bank-collapse-btn{margin-left:0!important;padding:8px 11px!important;font-size:10px!important;white-space:nowrap!important}
+#start #bankImportBody{
+  min-width:0!important;padding:18px!important;
+  border:1px solid var(--home-line)!important;border-radius:16px!important;
+  background:#fff!important;box-shadow:0 5px 18px rgba(18,62,67,.04)!important;
+}
+#start .bank-import-row{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important;margin:0 0 12px!important}
+#start .bank-field,#start .bank-file-label{font-size:10px!important}
+#start .bank-field select,#start .bank-file-label input{min-height:43px!important;margin-top:5px!important;font-size:12px!important}
+#start #jsonInput{min-height:220px!important;height:220px!important;max-height:460px!important;margin:0 0 10px!important;padding:13px!important;font-size:12px!important}
+#start .bank-import-card .actions{display:flex!important;flex-wrap:wrap!important;gap:8px!important;margin:0!important}
+#start .bank-import-card .actions .btn{min-height:39px!important;flex:0 0 auto!important;width:auto!important;padding:8px 12px!important;font-size:10px!important}
+#start .bank-import-card .helper{display:block!important;margin:10px 0 0!important;font-size:10px!important;line-height:1.5!important}
+#start .bank-import-summary{margin-top:10px!important;padding-top:10px!important;font-size:10px!important}
+#start .bank-import-summary:empty{display:none!important}
+#start .cloud-status-hidden{display:none!important}
+#start #examInfo{grid-column:1!important;grid-row:4!important;margin:0!important;padding:0!important;background:transparent!important}
+
+/* Tablet */
+@media(max-width:1100px){
+  #start .study-nav-actions.study-nav-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  #start .study-nav-actions>button.nav-tile.nav-tile{min-height:105px!important}
+}
+@media(max-width:900px){
+  #start .start{gap:14px!important}
+  #start .brand{
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto auto auto auto auto!important;
+    gap:0!important;padding:23px!important;
+  }
+  #start .brand .badge{grid-column:1!important;grid-row:1!important;margin:0 0 11px 0!important}
+  #start .brand h1{grid-column:1!important;grid-row:2!important;margin:0 0 7px!important}
+  #start .brand>.sub{grid-column:1!important;grid-row:3!important;margin:0!important}
+  #start .exam-countdown-card{grid-column:1!important;grid-row:4!important;min-height:0!important;margin:18px 0 0!important}
+  #start .revision-home-card{grid-column:1!important;grid-row:5!important;margin:12px 0 0!important}
+  #start .study-nav-actions.study-nav-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+}
+
+/* Phone — two clear tiles per row and a compact countdown */
+@media(max-width:620px){
+  #start.screen{padding:9px!important}
+  #start .start{gap:12px!important}
+  #start .brand{padding:18px 15px!important;border-radius:17px!important}
+  #start .brand:before{display:none!important}
+  #start .brand .badge{margin:0 0 10px 0!important;font-size:9px!important}
+  #start .brand h1{font-size:29px!important}
+  #start .brand>.sub{font-size:11px!important}
+  #start .exam-countdown-card{padding:13px 12px 11px!important;border-radius:15px!important}
+  #start .countdown-main{grid-template-columns:104px minmax(0,1fr)!important;gap:8px!important}
+  #start .countdown-ring-wrap{width:104px!important;height:104px!important}
+  #start .countdown-center strong{font-size:31px!important}
+  #start .countdown-center span{font-size:7px!important}
+  #start .countdown-heading{font-size:9px!important;margin-top:8px!important}
+  #start .countdown-day-number{font-size:16px!important}
+  #start .countdown-details p{font-size:9px!important;margin:5px 0 7px!important}
+  #start .countdown-date-grid{gap:4px!important}
+  #start .countdown-date-grid>div{padding:5px!important}
+  #start .countdown-date-grid small{font-size:6px!important}
+  #start .countdown-date-grid b{font-size:7px!important}
+  #start .countdown-clock{gap:5px!important;margin-bottom:9px!important}
+  #start .countdown-clock-unit{padding:7px 4px 6px!important;border-radius:8px!important}
+  #start .countdown-clock-unit strong{font-size:21px!important}
+  #start .countdown-clock-unit span{font-size:6px!important}
+  #start .countdown-progress-head{font-size:7px!important}
+  #start .countdown-bottom{font-size:7px!important}
+  #start .revision-home-card{padding:12px!important}
+  #start .study-tracker:before{margin-bottom:8px!important;font-size:9px!important}
+  #start .study-nav-actions.study-nav-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  #start .study-nav-actions.study-nav-actions>button.nav-tile.nav-tile{min-height:102px!important;padding:12px!important;gap:8px!important}
+  #start .study-nav-actions>button.nav-tile .nav-ico{width:34px!important;height:34px!important}
+  #start .study-nav-actions>button.nav-tile .nav-label{font-size:12px!important}
+  #start .study-nav-actions>button.nav-tile .nav-sub{font-size:9px!important}
+  #start .command-center{padding:14px!important;border-radius:14px!important}
+  #start .cc-top{align-items:flex-start!important}
+  #start .cc-top h2{font-size:17px!important}
+  #start .cc-top p{font-size:9px!important}
+  #start .cc-date{display:none!important}
+  #start .cc-metrics{grid-template-columns:1fr!important;gap:6px!important;margin-top:10px!important}
+  #start .cc-metrics article{padding:8px 10px!important}
+  #start .cc-metrics strong{font-size:18px!important}
+  #start .cc-footer{font-size:7px!important}
+  #start .bank-import-head{display:grid!important;grid-template-columns:38px minmax(0,1fr) auto!important;gap:9px!important;padding:12px!important}
+  #start .bank-import-head:before{grid-column:1!important;grid-row:1!important;width:38px!important;height:38px!important;flex-basis:38px!important}
+  #start .bank-import-head>div:first-child{grid-column:2!important;grid-row:1!important}
+  #start .bank-import-head h2{font-size:13px!important}
+  #start .bank-import-head p{font-size:9px!important}
+  #start .bank-cloud-pill{display:none!important}
+  #start .bank-collapse-btn{grid-column:3!important;grid-row:1!important;padding:7px 8px!important;font-size:9px!important}
+  #start #bankImportBody{padding:12px!important}
+  #start .bank-import-row{grid-template-columns:1fr!important;gap:9px!important}
+  #start #jsonInput{min-height:190px!important;height:190px!important}
+  #start .bank-import-card .actions{display:grid!important;grid-template-columns:1fr!important}
+  #start .bank-import-card .actions .btn{width:100%!important}
+  #start .bank-import-card .helper{font-size:9px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  #start .study-nav-actions>button.nav-tile,
+  #start .exam-countdown-card:before,#start .exam-countdown-card:after,
+  #start .countdown-live i,#start .countdown-ring-wrap:before,
+  #start .countdown-orbit-dot,#start .countdown-progress-track>span:after,
+  #start .countdown-decoration{animation:none!important;transition:none!important}
+}
+body.theme-dark #start.screen{background:#101b1d!important}
+body.theme-dark #start .command-center{border-color:#ffffff18!important}
+body.theme-dark #start .bank-import-head,
+body.theme-dark #start #bankImportBody{background:#1b2b2d!important;border-color:#3a5051!important;color:#e9f0ee!important}
+body.theme-dark #start .bank-import-head h2{color:#eaf2ef!important}
+body.theme-dark #start .bank-import-head p{color:#b4c6c2!important}
+body.theme-dark #start .study-tracker:before{color:#aabfba!important}
+body.theme-dark #start .study-nav-actions>button.nav-tile .nav-sub{color:#b9cbc8!important}
+body.theme-dark #start .bank-field,
+body.theme-dark #start .bank-file-label{color:#c7d8d3!important}
+body.theme-dark #start .bank-field select,
+body.theme-dark #start .bank-file-label input,
+body.theme-dark #start #jsonInput{background:#122124!important;color:#edf5f2!important;border-color:#435b5d!important}
+body.theme-dark #start .bank-import-card .helper{background:#172729!important;color:#c5d4d1!important;border-color:#405658!important}
+</style>
+
 </head>
 <body>
 <!-- ============================================================
@@ -3297,7 +3765,44 @@ body{background:radial-gradient(ellipse at 8% 4%,#e0eee8 0,transparent 38%),radi
 </div>
 <div class="screen" id="start">
 <main class="start">
-<div class="brand"><span class="badge">CGPSC EXAM PREPARATION</span><h1>HELLO KAUSHAL</h1><p class="sub">Structured question bank &bull; OMR navigation &bull; Detailed result analysis</p><div class="revision-home-card" id="revisionHomeCard"><div class="revision-home-head"><span class="revision-home-title">Revision</span><strong class="revision-count" id="revisionCount">0</strong></div><p class="revision-home-sub" id="revisionHomeSub">Wrong answers you save during tests will appear here automatically.</p><ul class="revision-focus-list" id="revisionFocusList"></ul><button class="revision-open-btn" id="revisionOpenBtn" type="button">Open Revision</button></div></div>
+<div class="brand"><span class="badge">CGPSC EXAM PREPARATION</span><h1>HELLO KAUSHAL</h1><p class="sub">Structured question bank &bull; OMR navigation &bull; Detailed result analysis</p>
+<section class="exam-countdown-card" id="examCountdownCard" aria-label="180-day CGPSC preparation countdown">
+  <div class="countdown-topline">
+    <span class="countdown-live"><i aria-hidden="true"></i><span id="examCountdownLiveLabel">COUNTDOWN ACTIVE</span></span>
+    <span class="countdown-season">2026 — 2027</span>
+  </div>
+  <div class="countdown-heading">YOUR 180-DAY MISSION</div>
+  <div class="countdown-main">
+    <div class="countdown-ring-wrap" aria-hidden="true">
+      <span class="countdown-orbit-dot"></span>
+      <svg class="countdown-ring-svg" viewBox="0 0 140 140" role="presentation">
+        <circle class="countdown-ring-track" cx="70" cy="70" r="58"></circle>
+        <circle class="countdown-ring-progress" id="examCountdownRing" cx="70" cy="70" r="58"></circle>
+      </svg>
+      <div class="countdown-center"><strong id="examDaysRemaining">180</strong><span>DAYS LEFT</span></div>
+    </div>
+    <div class="countdown-details">
+      <span class="countdown-eyebrow">THE CLOCK IS TICKING</span>
+      <strong class="countdown-day-number" id="examDayNumber">DAY 01 <small>/ 180</small></strong>
+      <p id="examCountdownMessage">A focused 180-day run. Build consistency, one day at a time.</p>
+      <div class="countdown-date-grid">
+        <div><small>START DATE</small><b>01 NOV 2026</b></div>
+        <div><small>TARGET DATE</small><b>30 APR 2027</b></div>
+      </div>
+    </div>
+  </div>
+  <div class="countdown-clock" role="timer" aria-label="Live countdown hours, minutes and seconds" aria-live="off">
+    <div class="countdown-clock-unit"><strong id="examCountdownHours">00</strong><span>HOURS</span></div>
+    <div class="countdown-clock-unit"><strong id="examCountdownMinutes">00</strong><span>MINUTES</span></div>
+    <div class="countdown-clock-unit"><strong id="examCountdownSeconds">00</strong><span>SECONDS</span></div>
+  </div>
+  <div class="countdown-progress-head"><span>PREPARATION PROGRESS</span><b id="examCountdownPercent">0% COMPLETE</b></div>
+  <div class="countdown-progress-track" role="progressbar" aria-label="Syllabus preparation progress" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" id="examCountdownProgressBar"><span id="examCountdownProgress"></span></div>
+  <div class="countdown-bottom"><span id="examCountdownStatus">180 days. One clear mission.</span><span>STAY THE COURSE <b aria-hidden="true">✦</b></span></div>
+  <span class="countdown-decoration countdown-decoration-one" aria-hidden="true">✦</span>
+  <span class="countdown-decoration countdown-decoration-two" aria-hidden="true">✧</span>
+</section>
+<div class="revision-home-card" id="revisionHomeCard"><div class="revision-home-head"><span class="revision-home-title">Revision</span><strong class="revision-count" id="revisionCount">0</strong></div><p class="revision-home-sub" id="revisionHomeSub">Wrong answers you save during tests will appear here automatically.</p><ul class="revision-focus-list" id="revisionFocusList"></ul><button class="revision-open-btn" id="revisionOpenBtn" type="button">Open Revision</button></div></div>
 <div aria-live="polite" class="study-tracker" id="studyTracker">
 <div class="study-nav-actions">
 <button aria-controls="trackerPanel" aria-expanded="false" class="tracker-toggle" id="trackerToggle" type="button">
@@ -7277,6 +7782,12 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     try{if(typeof window.queueCloudSave==='function')window.queueCloudSave()}catch(e){}
   }
   function topicKey(subject,group,topic){return subject+'|'+group+' › '+topic}
+  const SYLLABUS_PROGRESS_KEY='kaushal_syllabus_topic_progress_v1';
+  function syllabusProgressLoad(){try{const v=JSON.parse(localStorage.getItem(SYLLABUS_PROGRESS_KEY)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch(e){return {}}}
+  function syllabusProgressStats(){let total=0,done=0;const state=syllabusProgressLoad();CATALOG.forEach(s=>s.groups.forEach(g=>g[1].forEach(t=>{total++;if(state[topicKey(s.name,g[0],t)]===true)done++})));return {total,done,percent:total?Math.round(done/total*100):0}}
+  function updateSyllabusProgressUI(){const st=syllabusProgressStats();const pct=document.getElementById('examCountdownPercent'),bar=document.getElementById('examCountdownProgress'),track=document.getElementById('examCountdownProgressBar'),status=document.getElementById('examCountdownStatus');if(pct)pct.textContent=st.percent+'% COMPLETE';if(bar)bar.style.width=st.percent+'%';if(track){track.setAttribute('aria-valuenow',String(st.done));track.setAttribute('aria-valuemax',String(st.total));track.setAttribute('aria-valuetext',st.done+' of '+st.total+' syllabus subtopics completed')}if(status)status.textContent=st.done+' of '+st.total+' syllabus subtopics completed';const caption=document.getElementById('examCountdownProgressCaption');if(caption)caption.textContent=st.done+' / '+st.total+' SUBTOPICS';}
+  window.kaushalGetSyllabusProgress=syllabusProgressStats;
+  window.kaushalGetUncheckedTopics=function(){const st=syllabusProgressLoad(),out=[];CATALOG.forEach(s=>s.groups.forEach(g=>g[1].forEach(t=>{if(st[topicKey(s.name,g[0],t)]!==true)out.push({subject:s.name,group:g[0],topic:t,category:catalogBankFor(s.name,g[0])})})));return out};
   function topicNotes(d,subject,group,topic){
     const key=topicKey(subject,group,topic);
     return (Array.isArray(d[subject])?d[subject]:[]).filter(n=>String(n?.topic||'')===key);
@@ -7377,13 +7888,17 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
               const count=topicNotes(d,sub.name,g[0],t).length;
               const mcqCount=topicMcqCounts.get(topicKey(sub.name,g[0],t))||0;
               const isSel=selected.subject===sub.name&&selected.group===g[0]&&selected.topic===t;
-              return `<button type="button" class="ntf-topic-btn ${isSel?'is-selected':''}" data-open-topic="${esc(sub.name)}" data-open-group="${esc(g[0])}" data-open-topic-name="${esc(t)}">
-                <span class="ntf-topic-name">${esc(t)}</span>
-                <span class="ntf-topic-metrics">
-                  <span class="ntf-topic-count ntf-note-count ${count?'has-notes':''}" title="${count} saved notes" aria-label="${count} saved notes"><b>${count}</b><small>notes</small></span>
-                  <span class="ntf-topic-count ntf-mcq-count ${mcqCount?'has-mcqs':''}" title="${mcqCount} saved MCQs" aria-label="${mcqCount} saved MCQs"><b>${mcqCount}</b><small>MCQs</small></span>
-                </span>
-              </button>`;
+              const progressKey=topicKey(sub.name,g[0],t), completed=syllabusProgressLoad()[progressKey]===true;
+              return `<div class="ntf-topic-progress-row">
+                <button type="button" class="ntf-topic-btn ${isSel?'is-selected':''}" data-open-topic="${esc(sub.name)}" data-open-group="${esc(g[0])}" data-open-topic-name="${esc(t)}">
+                  <span class="ntf-topic-name">${esc(t)}</span>
+                  <span class="ntf-topic-metrics">
+                    <span class="ntf-topic-count ntf-note-count ${count?'has-notes':''}" title="${count} saved notes" aria-label="${count} saved notes"><b>${count}</b><small>notes</small></span>
+                    <span class="ntf-topic-count ntf-mcq-count ${mcqCount?'has-mcqs':''}" title="${mcqCount} saved MCQs" aria-label="${mcqCount} saved MCQs"><b>${mcqCount}</b><small>MCQs</small></span>
+                  </span>
+                </button>
+                <label class="ntf-topic-done" title="Mark this syllabus subtopic as completed"><input type="checkbox" data-syllabus-progress="${esc(progressKey)}" ${completed?'checked':''}><span>Done</span></label>
+              </div>`;
             }).join('')}</div>
           </details>`;
         }).join('')}</div>
@@ -7398,6 +7913,14 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
     host.querySelectorAll('[data-open-topic]').forEach(b=>b.onclick=()=>{
       openTopic(b.dataset.openTopic,b.dataset.openGroup,b.dataset.openTopicName);
     });
+    host.querySelectorAll('[data-syllabus-progress]').forEach(box=>box.onchange=()=>{
+      const state=syllabusProgressLoad(),key=box.dataset.syllabusProgress;
+      if(box.checked)state[key]=true;else delete state[key];
+      try{localStorage.setItem(SYLLABUS_PROGRESS_KEY,JSON.stringify(state))}catch(e){}
+      updateSyllabusProgressUI();
+      const row=box.closest('.ntf-topic-progress-row');if(row)row.classList.toggle('is-complete',box.checked);
+    });
+    updateSyllabusProgressUI();
   }
   window.notesRefreshTopicCounts=()=>{if($('ntfLibrary'))renderLibrary()};
   window.notesRefreshTopicPage=()=>{
@@ -7583,6 +8106,19 @@ if(sess()&&sess().end)setTimeout(openHall,900);   /* an exam in progress is re-o
   // Keep the existing Notes home navigation, but replace the page with the topic-first UI.
   window.notesV2Open=showNotesSafe;
   window.notesOpen=showNotes;
+  /* Plan -> Notes shortcut: find a syllabus topic by its text (+ plan category) and open its notes workspace. */
+  window.kaushalFindSyllabusTopic=function(text,category){
+    let first=null;
+    for(const s of CATALOG)for(const g of s.groups)for(const t of g[1]){
+      if(t!==text)continue;
+      const hit={subject:s.name,group:g[0],topic:t};
+      if(!category||catalogBankFor(s.name,g[0])===category)return hit;
+      if(!first)first=hit;
+    }
+    return first;
+  };
+  window.kaushalOpenSyllabusTopic=function(subject,group,topic){showNotes();openTopic(subject,group,topic)};
+  window.kaushalOpenNotesSearch=function(q){showNotes();const i=$('ntfSearch');if(i){i.value=q;i.dispatchEvent(new Event('input',{bubbles:true}))}};
   const home=$('notesHomeBtn');if(home){home.onclick=e=>{e.preventDefault();e.stopPropagation();showNotes()}}
 
   // Reader buttons return to the exact topic instead of the old common editor.
@@ -8438,8 +8974,9 @@ setInterval(tick,120000);
     if(!btn||!card)return;
     var label=btn.querySelector('.bank-collapse-label');
     function apply(c){card.classList.toggle('bank-collapsed',c);btn.setAttribute('aria-expanded',String(!c));if(label)label.textContent=c?'Show':'Hide'}
-    var saved=false;try{saved=localStorage.getItem(KEY)==='1'}catch(e){}
-    apply(saved);
+    var stored=null;try{stored=localStorage.getItem(KEY)}catch(e){}
+    /* First visit: keep the importer tucked away; retain the user's saved choice. */
+    apply(stored===null ? true : stored==='1');
     btn.addEventListener('click',function(){var c=!card.classList.contains('bank-collapsed');apply(c);try{localStorage.setItem(KEY,c?'1':'0')}catch(e){}});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
@@ -8723,6 +9260,404 @@ setInterval(tick,120000);
     wrapped.__kaushalMathWrapped = true;
     window[name] = wrapped;
   });
+})();
+</script>
+
+
+<script id="kaushal-180-day-countdown-script">
+/* Fixed 180-day preparation window: 01 Nov 2026 to 30 Apr 2027 (Asia/Kolkata). */
+(function(){
+  'use strict';
+  const START_MS = Date.parse('2026-11-01T00:00:00+05:30');
+  const TARGET_MS = Date.parse('2027-04-30T00:00:00+05:30');
+  const TOTAL_MS = TARGET_MS - START_MS;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const CIRCUMFERENCE = 2 * Math.PI * 58;
+  const byId = id => document.getElementById(id);
+
+  function renderExamCountdown(){
+    const card = byId('examCountdownCard');
+    if(!card) return;
+    const now = Date.now();
+    const remainingMs = Math.max(0, TARGET_MS - now);
+    const totalRemainingSeconds = Math.floor(remainingMs / 1000);
+    const daysLeft = Math.min(180, Math.floor(totalRemainingSeconds / 86400));
+    const hoursLeft = Math.floor((totalRemainingSeconds % 86400) / 3600);
+    const minutesLeft = Math.floor((totalRemainingSeconds % 3600) / 60);
+    const secondsLeft = totalRemainingSeconds % 60;
+    const elapsedMs = Math.max(0, now - START_MS);
+    const elapsedRatio = Math.max(0, Math.min(1, elapsedMs / TOTAL_MS));
+    const remainingRatio = Math.max(0, Math.min(1, remainingMs / TOTAL_MS));
+    const completedDays = Math.max(0, Math.min(180, Math.floor(elapsedMs / DAY_MS)));
+    const currentDay = Math.min(180, completedDays + 1);
+    const syllabusStats = typeof window.kaushalGetSyllabusProgress==='function' ? window.kaushalGetSyllabusProgress() : {done:0,total:0,percent:0};
+    const percent = syllabusStats.percent || 0;
+
+    byId('examDaysRemaining').textContent = String(daysLeft);
+    byId('examCountdownHours').textContent = String(hoursLeft).padStart(2,'0');
+    byId('examCountdownMinutes').textContent = String(minutesLeft).padStart(2,'0');
+    byId('examCountdownSeconds').textContent = String(secondsLeft).padStart(2,'0');
+    byId('examDayNumber').innerHTML = 'DAY ' + String(currentDay).padStart(2,'0') + ' <small>/ 180</small>';
+    byId('examCountdownRing').style.strokeDashoffset = String(CIRCUMFERENCE * (1 - remainingRatio));
+    byId('examCountdownProgress').style.width = percent.toFixed(3) + '%';
+    byId('examCountdownPercent').textContent = Math.round(percent) + '% COMPLETE';
+    byId('examCountdownProgressBar').setAttribute('aria-valuenow', String(syllabusStats.done));
+    byId('examCountdownProgressBar').setAttribute('aria-valuemax', String(syllabusStats.total));
+    byId('examCountdownProgressBar').setAttribute('aria-valuetext', syllabusStats.done + ' of ' + syllabusStats.total + ' syllabus subtopics completed');
+
+    if(daysLeft === 0){
+      byId('examCountdownLiveLabel').textContent = 'MISSION WINDOW COMPLETE';
+      byId('examCountdownMessage').textContent = 'You completed the 180-day preparation window. Be proud of the work you put in.';
+      byId('examCountdownStatus').textContent = syllabusStats.done + ' of ' + syllabusStats.total + ' syllabus subtopics completed';
+    } else if(completedDays === 0){
+      byId('examCountdownLiveLabel').textContent = 'COUNTDOWN ACTIVE';
+      byId('examCountdownMessage').textContent = 'A focused 180-day run. Build consistency, one day at a time.';
+      byId('examCountdownStatus').textContent = syllabusStats.done + ' of ' + syllabusStats.total + ' syllabus subtopics completed';
+    } else {
+      byId('examCountdownLiveLabel').textContent = 'COUNTDOWN ACTIVE';
+      byId('examCountdownMessage').textContent = 'Keep showing up. Every focused session moves you forward.';
+      byId('examCountdownStatus').textContent = syllabusStats.done + ' of ' + syllabusStats.total + ' syllabus subtopics completed';
+    }
+  }
+
+  renderExamCountdown();
+  window.setInterval(renderExamCountdown, 1000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) renderExamCountdown(); });
+})();
+</script>
+
+<script id="kaushal-progress-extras-sync-v1">
+/* Syncs the progress keys that the main cloud payload does not carry (syllabus ticks, smart-note status),
+   using its own small row in the SAME Supabase table (id ...0003). Per-key newest-edit-wins, so un-ticking also syncs.
+   Also repaints the home Command Center counters whenever tracker / plan / notes change.
+   It does not replace or modify any existing sync function. */
+(function(){
+'use strict';
+const KEYS=['kaushal_syllabus_topic_progress_v1','kaushal_smart_note_meta_v1','kaushal_smart_last_note_v1'];
+const TS_KEY='cgpsc_sync_base_progress_ts_v1';
+const ROW='00000000-0000-0000-0000-000000000003';
+let applying=false,timer=null,busy=false,again=false;
+const rd=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const tsLoad=()=>{try{return JSON.parse(rd(TS_KEY)||'{}')||{}}catch(e){return {}}};
+const _set=Storage.prototype.setItem,_rem=Storage.prototype.removeItem;
+function tsSet(k,t){const m=tsLoad();m[k]=t;try{_set.call(localStorage,TS_KEY,JSON.stringify(m))}catch(e){}}
+const enabled=()=>typeof cloudEnabled==='function'&&cloudEnabled();
+const ep=()=>cloudEndpoint()+'?id=eq.'+encodeURIComponent(ROW);
+
+/* stamp local edits (the app writes these keys straight to localStorage) */
+Storage.prototype.setItem=function(k){const r=_set.apply(this,arguments);if(this===window.localStorage&&!applying&&KEYS.indexOf(k)>-1){tsSet(k,Date.now());schedule(1500)}return r};
+Storage.prototype.removeItem=function(k){const r=_rem.apply(this,arguments);if(this===window.localStorage&&!applying&&KEYS.indexOf(k)>-1){tsSet(k,Date.now());schedule(1500)}return r};
+
+function collect(){const ts=tsLoad(),o={};KEYS.forEach(k=>{const v=rd(k);if(v!==null)o[k]={v:v,t:Number(ts[k])||0}});return o}
+function mergeInto(remote){
+  if(!remote||typeof remote!=='object')return false;
+  const ts=tsLoad();let changed=false;
+  applying=true;
+  try{KEYS.forEach(k=>{
+    const r=remote[k];if(!r||typeof r.v!=='string')return;
+    const lv=rd(k),lt=Number(ts[k])||0,rt=Number(r.t)||0;
+    if(lv===r.v){if(rt>lt)tsSet(k,rt);return}
+    let out=null,t=0;
+    if(lv===null){out=r.v;t=rt}
+    else if(lt>0&&rt>0){if(rt>lt){out=r.v;t=rt}}
+    else{ /* one side never stamped: union objects so nothing already ticked is lost */
+      try{const a=JSON.parse(r.v),b=JSON.parse(lv);
+        if(a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)){out=JSON.stringify({...a,...b});t=Date.now()}
+        else if(rt>lt){out=r.v;t=rt}}catch(e){if(rt>lt){out=r.v;t=rt}}
+    }
+    if(out!==null&&out!==lv){_set.call(localStorage,k,out);tsSet(k,t);changed=true}
+  })}finally{applying=false}
+  return changed;
+}
+async function pull(){
+  if(!enabled())return false;
+  const r=await fetch(ep()+'&select=payload',{headers:cloudHeaders(),cache:'no-store'});
+  if(!r.ok)throw new Error('extras pull '+r.status);
+  const rows=await r.json();
+  const changed=mergeInto(rows[0]&&rows[0].payload);
+  if(changed)repaint();
+  return changed;
+}
+async function push(){
+  if(!enabled())return;
+  if(busy){again=true;return}
+  busy=true;
+  try{
+    if(window.__kbReady)await window.__kbReady;
+    await pull();                                   /* merge first, so another device's ticks are never overwritten */
+    const body=JSON.stringify({id:ROW,payload:collect(),updated_at:new Date().toISOString()});
+    const r=await fetch(cloudEndpoint()+'?on_conflict=id',{method:'POST',headers:{...cloudHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},body:body});
+    if(!r.ok)throw new Error('extras push '+r.status);
+  }catch(e){console.warn('Progress extras sync:',e)}
+  finally{busy=false;if(again){again=false;schedule(2000)}}
+}
+function schedule(ms){clearTimeout(timer);timer=setTimeout(push,ms)}
+
+/* ---- keep the home Command Center in step with the data ---- */
+function todayKey(){return typeof trackerDate==='function'?trackerDate(new Date()):new Date().toISOString().slice(0,10)}
+function paintCommandCenter(){
+  try{
+    const notes=typeof notesLoad==='function'?notesLoad():{};
+    let n=0;Object.keys(notes||{}).forEach(k=>{if(Array.isArray(notes[k]))n+=notes[k].length});
+    const a=document.getElementById('ccNotesCount');if(a)a.textContent=String(n);
+    const p=typeof planLoad==='function'?planLoad():{},items=(p&&p.days&&Array.isArray(p.days[todayKey()]))?p.days[todayKey()]:[];
+    const b=document.getElementById('ccPlanDone');if(b)b.textContent=items.filter(x=>x&&x.done).length+'/'+items.length;
+    const t=typeof getTrackerSnapshot==='function'?getTrackerSnapshot():{days:{}},d=t&&t.days&&t.days[todayKey()];
+    const c=document.getElementById('ccQuestionsToday');if(c)c.textContent=String(!d?0:(Array.isArray(d)?d.length:Object.keys(d).length));
+  }catch(e){}
+}
+function repaint(){
+  paintCommandCenter();
+  try{if(typeof window.kaushalSmartNotesRender==='function')window.kaushalSmartNotesRender()}catch(e){}
+  try{const ns=document.getElementById('notesScreen');if(ns&&!ns.classList.contains('hidden')&&typeof window.notesRefreshTopicPage==='function')window.notesRefreshTopicPage()}catch(e){}
+  /* the syllabus % bar repaints itself every second from the stored ticks */
+}
+['trackerRender','planRender','revisionRenderHome'].forEach(name=>{
+  try{const f=window[name];if(typeof f==='function'){window[name]=function(){const r=f.apply(this,arguments);paintCommandCenter();return r}}}catch(e){}
+});
+window.addEventListener('focus',()=>{paintCommandCenter();pull().catch(()=>{})});
+window.addEventListener('pageshow',paintCommandCenter);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){paintCommandCenter();pull().catch(()=>{})}else if(enabled()){clearTimeout(timer);push()}});
+window.addEventListener('pagehide',()=>{if(enabled())push()});
+window.addEventListener('online',()=>schedule(500));
+setInterval(()=>{if(document.visibilityState==='visible')pull().catch(()=>{})},60000);
+(window.__kbReady||Promise.resolve()).then(()=>{paintCommandCenter();pull().then(()=>push()).catch(e=>console.warn('Progress extras first sync:',e))});
+})();
+</script>
+
+<script id="kaushal-plan-topic-suggestions-v1">
+/* Plan screen: suggests today's topics from the UNCHECKED syllabus subtopics, paced so that everything left
+   is finished by the exam date (same date as the countdown). Pace = ceil(unchecked topics / days left). */
+(function(){
+'use strict';
+const TARGET_MS=Date.parse('2027-04-30T00:00:00+05:30'),DAY=864e5;
+const st=document.createElement('style');
+st.textContent=`
+#planSuggestCard{background:var(--surface,#fff);color:var(--text,#123e43);border:1px solid var(--border,#d7e3e0);border-radius:18px;padding:16px 18px;margin-bottom:16px}
+#planSuggestCard .ps-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+#planSuggestCard h2{margin:0;font-size:17px}
+#planSuggestCard .ps-sub{margin:4px 0 0;font-size:12px;color:var(--muted,#647d83);line-height:1.5}
+#planSuggestCard .ps-pace{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+#planSuggestCard .ps-pace span{background:var(--soft,#eef5f3);border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700}
+#planSuggestCard .ps-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border,#d7e3e0)}
+#planSuggestCard .ps-row b{display:block;font-size:13px;line-height:1.4}
+#planSuggestCard .ps-row small{font-size:11px;color:var(--muted,#647d83)}
+#planSuggestCard .ps-row>div{flex:1;min-width:0}
+#planSuggestCard button{border-radius:10px;padding:7px 12px;font-weight:700;font-size:12px;border:1px solid var(--border,#b9cdc9);background:var(--soft,#eef5f3);color:inherit;cursor:pointer}
+#planSuggestCard button.ps-all{background:#123e43;color:#fff;border-color:#123e43}
+#planSuggestCard button:disabled{opacity:.5;cursor:default}
+`;
+document.head.appendChild(st);
+
+function daysLeft(){return Math.max(1,Math.ceil((TARGET_MS-Date.now())/DAY))}
+function dayOffset(){
+  const [ty,tm,td]=trackerDate(new Date()).split('-').map(Number),[y,m,d]=planSelectedDate.split('-').map(Number);
+  return Math.round((new Date(y,m-1,d)-new Date(ty,tm-1,td))/DAY);
+}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function addTopics(list){
+  const data=planLoad(),items=planItems(),have=new Set(items.map(x=>x.text));
+  list.forEach((t,i)=>{if(have.has(t.topic))return;
+    items.push({id:'p_'+Date.now()+'_'+i+Math.random().toString(36).slice(2,6),text:t.topic,category:t.category||'Uncategorized',priority:'normal',done:false,createdAt:new Date().toISOString(),u:new Date().toISOString(),src:'syllabus'})});
+  data.days[planSelectedDate]=items;planSave(data);planRender();
+}
+/* round-robin across subjects, so every day mixes different subjects (order inside a subject stays syllabus order) */
+function interleave(list){
+  const by=new Map();list.forEach(t=>{const k=t.category||t.subject;if(!by.has(k))by.set(k,[]);by.get(k).push(t)});
+  const qs=[...by.values()],out=[];let more=true;
+  for(let i=0;more;i++){more=false;qs.forEach(q=>{if(i<q.length){out.push(q[i]);more=true}})}
+  return out;
+}
+function render(){
+  const main=document.querySelector('#planScreen .plan-layout>main');if(!main)return;
+  let card=document.getElementById('planSuggestCard');
+  if(!card){card=document.createElement('section');card.id='planSuggestCard';main.insertBefore(card,main.firstChild)}
+  if(typeof window.kaushalGetUncheckedTopics!=='function'){card.style.display='none';return}
+  card.style.display='';
+  const left=interleave(window.kaushalGetUncheckedTopics()),days=daysLeft(),perDay=left.length?Math.ceil(left.length/days):0,n=dayOffset();
+  const head='<div class="ps-head"><div><h2>Suggested topics for this day</h2><p class="ps-sub">Built from your unchecked syllabus subtopics, mixed across different subjects, so everything is covered before the exam. Tick topics in Notes › Syllabus and this updates.</p></div></div>'+
+    '<div class="ps-pace"><span>'+left.length+' topics left</span><span>'+days+' days left</span><span>≈ '+perDay+' topics / day</span></div>';
+  if(!left.length){card.innerHTML=head+'<p class="ps-sub">🎉 Every syllabus subtopic is checked. Nothing left to schedule.</p>';return}
+  if(n<0){card.innerHTML=head+'<p class="ps-sub">This day is in the past. Open today or a later day to see suggestions.</p>';return}
+  if(n>=days){card.innerHTML=head+'<p class="ps-sub">This day is on or after the exam date.</p>';return}
+  const slice=left.slice(n*perDay,(n+1)*perDay);
+  if(!slice.length){card.innerHTML=head+'<p class="ps-sub">No topics fall on this day at the current pace. You are ahead of schedule.</p>';return}
+  const have=new Set(planItems().map(x=>x.text)),fresh=slice.filter(t=>!have.has(t.topic));
+  card.innerHTML=head+slice.map((t,i)=>'<div class="ps-row"><div><b>'+esc(t.topic)+'</b><small>'+esc(t.subject)+' · '+esc(t.group)+'</small></div>'+
+    (have.has(t.topic)?'<button disabled>Added ✓</button>':'<button data-ps-add="'+i+'">+ Add</button>')+'</div>').join('')+
+    '<div style="margin-top:10px"><button class="ps-all" data-ps-all="1"'+(fresh.length?'':' disabled')+'>Add '+(fresh.length?'all '+fresh.length:'all')+' to this day</button></div>';
+  card.onclick=e=>{
+    const b=e.target.closest('button');if(!b||b.disabled)return;
+    if(b.dataset.psAll)addTopics(fresh);
+    else if(b.dataset.psAdd!==undefined)addTopics([slice[+b.dataset.psAdd]]);
+  };
+}
+function addNoteButtons(){
+  const list=document.getElementById('planTopicList');if(!list)return;
+  const items=planItems();
+  list.querySelectorAll('.plan-topic-item[data-plan-id]').forEach(row=>{
+    const acts=row.querySelector('.plan-topic-actions');if(!acts||acts.querySelector('[data-plan-notes]'))return;
+    const it=items.find(x=>x.id===row.dataset.planId);if(!it)return;
+    const b=document.createElement('button');b.type='button';b.className='plan-icon-btn';b.dataset.planNotes=it.id;
+    b.title='Open notes for this topic';b.setAttribute('aria-label','Open notes for this topic');b.textContent='📝';
+    b.style.width='auto';b.style.padding='0 10px';b.style.fontSize='12px';b.style.fontWeight='700';b.textContent='📝 Notes';
+    acts.insertBefore(b,acts.firstChild);
+  });
+  if(!list.dataset.notesBound){
+    list.dataset.notesBound='1';
+    list.addEventListener('click',e=>{
+      const b=e.target.closest('[data-plan-notes]');if(!b)return;
+      e.preventDefault();e.stopPropagation();
+      const it=planItems().find(x=>x.id===b.dataset.planNotes);if(!it)return;
+      const hit=typeof window.kaushalFindSyllabusTopic==='function'?window.kaushalFindSyllabusTopic(it.text,it.category):null;
+      if(hit&&typeof window.kaushalOpenSyllabusTopic==='function')window.kaushalOpenSyllabusTopic(hit.subject,hit.group,hit.topic);
+      else if(typeof window.kaushalOpenNotesSearch==='function')window.kaushalOpenNotesSearch(it.text);
+    },true);
+  }
+}
+const orig=window.planRender;
+window.planRender=function(){const r=orig.apply(this,arguments);try{render()}catch(e){console.warn('plan suggestions:',e)}try{addNoteButtons()}catch(e){console.warn('plan notes buttons:',e)}return r};
+try{if(!document.getElementById('planScreen').classList.contains('hidden'))window.planRender()}catch(e){}
+})();
+</script>
+
+<style id="front-page-visuals-css">
+/* ===== Front page only: interactive answer-sheet background + hero depth ===== */
+#fpFieldCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;display:block}
+#start.screen .start{position:relative;z-index:1}
+
+/* glass tiles so the bubble field shows through, with a glow in each tile's own colour */
+#start.screen .study-nav-actions.study-nav-actions > button.nav-tile.nav-tile{
+  background:linear-gradient(150deg,var(--a-soft),rgba(255,255,255,0) 68%),rgba(255,255,255,.66)!important;
+  -webkit-backdrop-filter:blur(10px) saturate(1.25);backdrop-filter:blur(10px) saturate(1.25);
+}
+body.theme-dark #start.screen .study-nav-actions.study-nav-actions > button.nav-tile.nav-tile{
+  background:linear-gradient(150deg,var(--a-soft-d),rgba(20,36,38,0) 68%),rgba(20,36,38,.62)!important;
+}
+body.theme-dark #start.screen .study-nav-actions > button.nav-tile .nav-label{color:#eaf3f1!important}
+@media (hover:hover){
+  #start.screen .study-nav-actions.study-nav-actions > button.nav-tile.nav-tile:hover{
+    box-shadow:0 0 0 1px var(--a),0 18px 34px -16px var(--a)!important;
+  }
+}
+
+/* hero: cursor spotlight + gentle tilt of the countdown card */
+#start .brand{perspective:1100px}
+#start .brand .fp-spot{
+  position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;
+  background:radial-gradient(440px circle at var(--mx,70%) var(--my,30%),rgba(231,196,119,.22),rgba(231,196,119,0) 62%);
+  mix-blend-mode:screen;opacity:0;transition:opacity .45s ease;
+}
+#start .brand.fp-hot .fp-spot{opacity:1}
+#start .brand .exam-countdown-card{
+  transform:rotateX(var(--fp-rx,0deg)) rotateY(var(--fp-ry,0deg));
+  transition:transform .25s ease-out;will-change:transform;
+}
+
+@media (prefers-reduced-motion:reduce){
+  #start .brand .exam-countdown-card{transform:none!important;transition:none}
+}
+</style>
+<script id="front-page-visuals-js">
+(function(){
+'use strict';
+const start=document.getElementById('start');if(!start)return;
+const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fine=window.matchMedia&&matchMedia('(hover:hover) and (pointer:fine)').matches;
+
+/* ---------- hero extras (markup) ---------- */
+const brand=start.querySelector('.brand');
+if(brand){
+  if(!brand.querySelector('.fp-spot')){const s=document.createElement('div');s.className='fp-spot';s.setAttribute('aria-hidden','true');brand.insertBefore(s,brand.firstChild)}
+}
+
+/* ---------- answer-sheet bubble field ---------- */
+const cv=document.createElement('canvas');cv.id='fpFieldCanvas';cv.setAttribute('aria-hidden','true');
+start.insertBefore(cv,start.firstChild);
+const ctx=cv.getContext('2d');
+const GAP=48,R_PUSH=150,R_MARK=62,LET=['A','B','C','D'];
+let W=0,H=0,dpr=1,cells=[],mx=-9999,my=-9999,running=false,pending=false;
+
+function build(){
+  dpr=Math.min(window.devicePixelRatio||1,2);W=innerWidth;H=innerHeight;
+  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  cells=[];
+  const cols=Math.ceil(W/GAP)+2,rows=Math.ceil(H/GAP)+2;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const hx=c*GAP+(r%2?GAP/2:0)-GAP/2,hy=r*GAP-GAP/2;
+    cells.push({hx,hy,x:hx,y:hy,m:0,ph:Math.random()*6.283,l:LET[(c+(r%2?2:0))%4]});
+  }
+}
+const dark=()=>document.body.classList.contains('theme-dark');
+
+function frame(t){
+  if(!running)return;
+  if(start.classList.contains('hidden')||document.hidden){running=false;return}
+  ctx.clearRect(0,0,W,H);
+  const dk=dark(),ink=dk?'168,230,207':'18,62,67';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  for(let i=0;i<cells.length;i++){
+    const c=cells[i];
+    const fx=reduce?0:Math.sin(t*.0006+c.ph)*3,fy=reduce?0:Math.cos(t*.0005+c.ph*1.3)*3;
+    let tx=c.hx+fx,ty=c.hy+fy,prox=0;
+    const dx=tx-mx,dy=ty-my,d=Math.sqrt(dx*dx+dy*dy);
+    if(d<R_PUSH){
+      prox=1-d/R_PUSH;const k=prox*prox*34/(d||1);
+      tx+=dx*k;ty+=dy*k;
+    }
+    c.x+=(tx-c.x)*.16;c.y+=(ty-c.y)*.16;
+    if(d<R_MARK)c.m=Math.min(1,c.m+.3);else c.m*=.972;
+    if(c.m<.01)c.m=0;
+    const r=9*(1+.3*prox);
+    ctx.beginPath();ctx.arc(c.x,c.y,r,0,6.2832);
+    if(c.m>0){ctx.fillStyle='rgba(231,190,96,'+(.9*c.m).toFixed(3)+')';ctx.fill()}
+    ctx.lineWidth=1.2;ctx.strokeStyle='rgba('+ink+','+(.12+.38*prox+.2*c.m).toFixed(3)+')';ctx.stroke();
+    ctx.font='600 '+Math.round(r*1.05)+'px Inter,system-ui,sans-serif';
+    ctx.fillStyle='rgba('+(c.m>.4?'18,62,67':ink)+','+(.16+.5*prox+.4*c.m).toFixed(3)+')';
+    ctx.fillText(c.l,c.x,c.y+.5);
+  }
+  if(pending){applyHero();pending=false}
+  if(!reduce)requestAnimationFrame(frame);else running=false;
+}
+function run(){
+  if(running||start.classList.contains('hidden')||document.hidden)return;
+  running=true;requestAnimationFrame(frame);
+}
+
+/* ---------- pointer: field + hero spotlight + card tilt ---------- */
+let px=0,py=0;
+function applyHero(){
+  if(!brand)return;
+  const b=brand.getBoundingClientRect();
+  const inside=px>=b.left&&px<=b.right&&py>=b.top&&py<=b.bottom;
+  brand.classList.toggle('fp-hot',inside);
+  if(!inside){brand.style.setProperty('--fp-rx','0deg');brand.querySelector('.exam-countdown-card')?.style.setProperty('--fp-rx','0deg');brand.querySelector('.exam-countdown-card')?.style.setProperty('--fp-ry','0deg');return}
+  brand.style.setProperty('--mx',(px-b.left)+'px');brand.style.setProperty('--my',(py-b.top)+'px');
+  const card=brand.querySelector('.exam-countdown-card');
+  if(card&&fine&&!reduce&&innerWidth>980){
+    const nx=(px-(b.left+b.width/2))/(b.width/2),ny=(py-(b.top+b.height/2))/(b.height/2);
+    card.style.setProperty('--fp-ry',(nx*2).toFixed(2)+'deg');
+    card.style.setProperty('--fp-rx',(-ny*2).toFixed(2)+'deg');
+  }
+}
+window.addEventListener('pointermove',e=>{
+  mx=px=e.clientX;my=py=e.clientY;pending=true;
+  if(reduce)return;
+  run();
+},{passive:true});
+function leave(){mx=my=-9999;if(brand){brand.classList.remove('fp-hot');const c=brand.querySelector('.exam-countdown-card');if(c){c.style.setProperty('--fp-rx','0deg');c.style.setProperty('--fp-ry','0deg')}}}
+document.addEventListener('pointerleave',leave);
+window.addEventListener('blur',leave);
+window.addEventListener('pointerup',e=>{if(e.pointerType==='touch')setTimeout(leave,350)});
+
+/* ---------- lifecycle: only animate while the front page is showing ---------- */
+let rt=null;
+window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{build();if(reduce&&!start.classList.contains('hidden')){running=true;frame(0)}},150)});
+new MutationObserver(()=>{if(!start.classList.contains('hidden')){build();run();if(reduce){running=true;frame(0)}}})
+  .observe(start,{attributes:true,attributeFilter:['class']});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)run()});
+build();run();
+if(reduce){running=true;frame(0)}
 })();
 </script>
 
